@@ -7,8 +7,9 @@ import {
   type NovaMeta,
   type NovoLancamento,
 } from './repositorio';
-import { sementeLancamentos, sementeMetas } from './seed';
-import { CLIENTE_ARGENNTI_ID } from '@/data/piloto';
+import { METAS_ADSTART_ARGENNTI_OUT26, sementeLancamentos, sementeMetas } from './seed';
+import { CLIENTE_ARGENNTI_ID, CLIENTE_EXEMPLO_A_ID, CLIENTE_EXEMPLO_B_ID } from '@/data/piloto';
+import { simularMeta } from '@/domain/calculadora';
 
 function memoria(): ArmazenamentoLocal {
   const mapa = new Map<string, string>();
@@ -49,9 +50,36 @@ describe('sementes de exemplo', () => {
     }
   });
 
-  it('o piloto Argennti tem meta de out/2026', () => {
+  it('o piloto Argennti tem a meta oficial do Adstart de out/2026', () => {
     const meta = sementeMetas().find((m) => m.clientId === CLIENTE_ARGENNTI_ID);
-    expect(meta).toMatchObject({ ano: 2026, mes: 10, metaReceita: 2_414_531 });
+    expect(meta).toMatchObject({
+      ano: 2026,
+      mes: 10,
+      metaReceita: 2_414_530.16,
+      premissas: { orcamento: 577_000, cps: 0.94, conversao: 0.0151, ticket: 260.5 },
+      pesos: { d1: 0.33, d2: 0.34, d3: 0.33 },
+      updatedBy: 'Adstart — tela Metas, out/26',
+      motivoAlteracao: null,
+    });
+  });
+
+  it('a calculadora reproduz sessões, pedidos, receita e ROAS do Adstart (arredondamento)', () => {
+    const meta = sementeMetas().find((m) => m.clientId === CLIENTE_ARGENNTI_ID)!;
+    const s = simularMeta(meta.premissas);
+    // 577.000 ÷ 0,94 = 613.829,79 (Adstart 613.830)
+    expect(s.sessoes).toBeCloseTo(613_829.787234, 5);
+    expect(Math.round(s.sessoes)).toBe(METAS_ADSTART_ARGENNTI_OUT26.sessoes);
+    // × 1,51% = 9.268,83 (Adstart 9.269)
+    expect(s.pedidos).toBeCloseTo(9_268.829787, 5);
+    expect(Math.round(s.pedidos)).toBe(METAS_ADSTART_ARGENNTI_OUT26.pedidos);
+    // × 260,50 = 2.414.530,1596 (meta fixa 2.414.530,16: diferença < 1 centavo)
+    expect(s.receita).toBeCloseTo(2_414_530.16, 2);
+    // ROAS 2.414.530 ÷ 577.000 = 4,1846 (Adstart 4,18)
+    expect(s.roas).toBeCloseTo(METAS_ADSTART_ARGENNTI_OUT26.roas, 2);
+  });
+
+  it('o seed tem só a Argennti como cliente real (A e B são exemplos)', () => {
+    expect(sementeMetas().map((m) => m.clientId)).toEqual([CLIENTE_ARGENNTI_ID, CLIENTE_EXEMPLO_A_ID, CLIENTE_EXEMPLO_B_ID]);
   });
 
   it('lançamentos de exemplo são válidos', () => {

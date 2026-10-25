@@ -7,12 +7,29 @@ import { CLIENTE_ARGENNTI_ID, CLIENTE_EXEMPLO_A_ID, CLIENTE_EXEMPLO_B_ID } from 
  * As metas reais da Argennti entram aqui quando forem liberadas. Edite só os valores,
  * mantendo a forma (ver docs/ENTREGA_AUGUSTO.md, seção "Como trocar o seed").
  *
- * Referências usadas para o piloto (inventário WOLFOS, 25/10/2026):
- * - meta de out/2026 = 2.414.531 (monthly_goals, manual)
- * - orçamento de out/2026 = 577.000 (client_monthly_budget)
- * - CPS, conversão e ticket = médias jul–set/2026 (CPS 0,91 · conversão 1,43% · ticket R$ 263)
- * Pesos por decêndio e os clientes de exemplo A e B são PLACEHOLDERS.
+ * Argennti out/2026: metas OFICIAIS do Adstart (tela Metas, coluna OUTUBRO DE 26, linha
+ * "Argennti Joias"), recebidas em 25/10/2026. Ver METAS_ADSTART_ARGENNTI_OUT26.
+ * Pesos por decêndio (reserva/fallback) e os clientes de exemplo A e B são PLACEHOLDERS.
  */
+
+/** Origem das metas oficiais da Argennti em out/2026. */
+export const FONTE_METAS_ARGENNTI_OUT26 = 'Adstart — tela Metas, out/26';
+
+/**
+ * Valores oficiais exatamente como na tela Metas do Adstart (out/26, Argennti Joias).
+ * Só investimento, faturamento, CPS, conversão e ticket entram na meta; ROAS, sessões e
+ * pedidos são a referência que a calculadora precisa reproduzir (testado em repositorio.test.ts).
+ */
+export const METAS_ADSTART_ARGENNTI_OUT26 = {
+  investimento: 577_000,
+  faturamento: 2_414_530.16,
+  roas: 4.18,
+  sessoes: 613_830,
+  conversao: 0.0151,
+  ticket: 260.5,
+  pedidos: 9269,
+  cps: 0.94,
+} as const;
 
 const PESOS_PLACEHOLDER = { d1: 0.33, d2: 0.34, d3: 0.33 };
 
@@ -21,11 +38,17 @@ export function sementeMetas(): MetaMes[] {
   return [
     {
       ...base,
+      updatedBy: FONTE_METAS_ARGENNTI_OUT26,
       clientId: CLIENTE_ARGENNTI_ID,
       ano: 2026,
       mes: 10,
-      metaReceita: 2_414_531,
-      premissas: { orcamento: 577_000, cps: 0.91, conversao: 0.0143, ticket: 263 },
+      metaReceita: METAS_ADSTART_ARGENNTI_OUT26.faturamento,
+      premissas: {
+        orcamento: METAS_ADSTART_ARGENNTI_OUT26.investimento,
+        cps: METAS_ADSTART_ARGENNTI_OUT26.cps,
+        conversao: METAS_ADSTART_ARGENNTI_OUT26.conversao,
+        ticket: METAS_ADSTART_ARGENNTI_OUT26.ticket,
+      },
       pesos: { ...PESOS_PLACEHOLDER },
     },
     {
