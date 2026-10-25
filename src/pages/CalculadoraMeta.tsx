@@ -187,7 +187,7 @@ function paraDados(campos: CamposMeta, clienteId: string, ano: number, mes: numb
   if (numeros.some((valor) => valor.trim() === '' || !Number.isFinite(Number(valor)))) return null;
   const n = (valor: string) => Number(valor);
   return {
-    clientId,
+    clientId: clienteId,
     ano,
     mes,
     metaReceita: n(campos.meta),
