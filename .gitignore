@@ -4,6 +4,7 @@ _referencia/
 # Dependências e build
 node_modules
 dist
+*.tsbuildinfo
 *.local
 
 # Ambiente: credenciais nunca entram no repo
