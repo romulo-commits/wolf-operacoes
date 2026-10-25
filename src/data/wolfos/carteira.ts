@@ -1,5 +1,6 @@
 import type { ClienteCarteira, PdaCarteira, ReceitaGa4Dia, SyncCarteira } from '@/domain/carteira';
 import { dataIso, prefixoMes } from '@/domain/carteira';
+import { diasNoMes } from '@/domain/calendario';
 import { obterLeiturasWolfos, type LeiturasWolfos } from './conexao';
 import { dadosExemplo } from './exemplo';
 
@@ -20,6 +21,8 @@ export interface DadosWolfos {
   syncPlataformas: SyncPlataforma[];
   pdas: PdaCarteira[];
   receitaGa4: ReceitaGa4Dia[];
+  /** GA4 diário do mesmo mês do ano anterior: base dos pesos históricos por decêndio. */
+  receitaGa4AnoAnterior: ReceitaGa4Dia[];
 }
 
 interface LinhaCliente {
@@ -63,8 +66,10 @@ async function lerDoWolfos(
   hoje: Date,
 ): Promise<DadosWolfos> {
   const prefixo = prefixoMes(ano, mes);
+  const prefixoAnoAnterior = prefixoMes(ano - 1, mes);
+  const ultimoDiaAnoAnterior = String(diasNoMes(ano - 1, mes)).padStart(2, '0');
 
-  const [clientes, sync, pdas, ga4] = await Promise.all([
+  const [clientes, sync, pdas, ga4, ga4AnoAnterior] = await Promise.all([
     leituras.dev.selecionarTodos<LinhaCliente>('clients', {
       colunas: 'id,name',
       filtros: [{ coluna: 'status', op: 'eq', valor: 'active' }],
@@ -90,7 +95,22 @@ async function lerDoWolfos(
       ],
       ordenarPor: 'date',
     }),
+    // Mesmo mês do ano anterior, só para os pesos históricos (somente leitura).
+    leituras.ads.selecionarTodos<LinhaGa4>('v_analytics_diario', {
+      colunas: 'client_id,date,revenue',
+      filtros: [
+        { coluna: 'date', op: 'gte', valor: `${prefixoAnoAnterior}-01` },
+        { coluna: 'date', op: 'lte', valor: `${prefixoAnoAnterior}-${ultimoDiaAnoAnterior}` },
+      ],
+      ordenarPor: 'date',
+    }),
   ]);
+
+  const paraReceita = (r: LinhaGa4): ReceitaGa4Dia => ({
+    clientId: r.client_id,
+    date: r.date,
+    receita: Number(r.revenue ?? 0),
+  });
 
   return {
     fonte: 'wolfos',
@@ -103,7 +123,8 @@ async function lerDoWolfos(
       ultimaDataComDado: s.ultima_data_com_dado,
     })),
     pdas: pdas.map((p) => ({ clientId: p.client_id, dueDate: p.due_date })),
-    receitaGa4: ga4.map((r) => ({ clientId: r.client_id, date: r.date, receita: Number(r.revenue ?? 0) })),
+    receitaGa4: ga4.map(paraReceita),
+    receitaGa4AnoAnterior: ga4AnoAnterior.map(paraReceita),
   };
 }
 

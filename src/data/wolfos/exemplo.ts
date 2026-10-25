@@ -1,5 +1,6 @@
 import type { PdaCarteira, ReceitaGa4Dia, ClienteCarteira } from '@/domain/carteira';
 import { prefixoMes } from '@/domain/carteira';
+import { diasNoMes } from '@/domain/calendario';
 import { CLIENTE_ARGENNTI_ID, CLIENTE_EXEMPLO_A_ID, CLIENTE_EXEMPLO_B_ID } from '@/data/piloto';
 import type { DadosWolfos, SyncPlataforma } from './carteira';
 
@@ -19,6 +20,23 @@ function distribuirPorDia(clientId: string, total: number, prefixo: string): Rec
     date: `${prefixo}-${String(i + 1).padStart(2, '0')}`,
     receita: porDia,
   }));
+}
+
+/**
+ * GA4 diário de exemplo para o mesmo mês do ano anterior. `porDecendio` = receita por dia
+ * em D1, D2 e D3 (ilustrativo). Gera os pesos históricos do exemplo.
+ */
+function historicoPorDecendio(
+  clientId: string,
+  prefixo: string,
+  totalDias: number,
+  porDecendio: [number, number, number],
+): ReceitaGa4Dia[] {
+  return Array.from({ length: totalDias }, (_, i) => {
+    const dia = i + 1;
+    const indice = dia <= 10 ? 0 : dia <= 20 ? 1 : 2;
+    return { clientId, date: `${prefixo}-${String(dia).padStart(2, '0')}`, receita: porDecendio[indice] };
+  });
 }
 
 export function dadosExemplo(ano: number, mes: number): DadosWolfos {
@@ -65,5 +83,14 @@ export function dadosExemplo(ano: number, mes: number): DadosWolfos {
     ...distribuirPorDia(CLIENTE_EXEMPLO_B_ID, 700_000, prefixo),
   ];
 
-  return { fonte: 'exemplo', clientes, syncPlataformas, pdas, receitaGa4 };
+  // Ano anterior: Argennti e Exemplo A têm histórico (pesos históricos);
+  // Exemplo B não tem, para mostrar o fallback com os pesos da meta.
+  const prefixoAnterior = prefixoMes(ano - 1, mes);
+  const diasAnterior = diasNoMes(ano - 1, mes);
+  const receitaGa4AnoAnterior: ReceitaGa4Dia[] = [
+    ...historicoPorDecendio(CLIENTE_ARGENNTI_ID, prefixoAnterior, diasAnterior, [70_000, 50_000, 60_000]),
+    ...historicoPorDecendio(CLIENTE_EXEMPLO_A_ID, prefixoAnterior, diasAnterior, [30_000, 32_000, 40_000]),
+  ];
+
+  return { fonte: 'exemplo', clientes, syncPlataformas, pdas, receitaGa4, receitaGa4AnoAnterior };
 }

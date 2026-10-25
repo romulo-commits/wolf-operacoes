@@ -64,3 +64,17 @@ describe('dadosExemplo', () => {
     expect(sync?.diasAtraso).toBe(9);
   });
 });
+
+describe('dadosExemplo · ano anterior', () => {
+  const dados = dadosExemplo(2026, 10);
+
+  it('traz GA4 diário do mesmo mês do ano anterior para os pesos históricos', () => {
+    const argennti = dados.receitaGa4AnoAnterior.filter((r) => r.clientId === CLIENTE_ARGENNTI_ID);
+    expect(argennti).toHaveLength(31);
+    expect(argennti.every((r) => r.date.startsWith('2025-10-'))).toBe(true);
+  });
+
+  it('o Exemplo B fica sem histórico para mostrar o fallback', () => {
+    expect(dados.receitaGa4AnoAnterior.some((r) => r.clientId === CLIENTE_EXEMPLO_B_ID)).toBe(false);
+  });
+});

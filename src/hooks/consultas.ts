@@ -33,6 +33,7 @@ export function useCarteira(ano: number, mes: number) {
         sync,
         pdas: dados.pdas,
         receitaGa4: dados.receitaGa4,
+        receitaGa4AnoAnterior: dados.receitaGa4AnoAnterior,
       });
       return {
         fonte: dados.fonte,
