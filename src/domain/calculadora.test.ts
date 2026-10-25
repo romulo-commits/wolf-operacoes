@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { media, simularMeta } from './calculadora';
 
 describe('simularMeta', () => {
-  it('reproduz a calculadora de referência (Rei das Joias, set)', () => {
+  it('reproduz o exemplo de simulação da planilha de referência', () => {
     // R$ 25.000 ÷ R$ 0,20 = 125.000 sessões · × 0,53% = 662,5 pedidos · × R$ 661,48 = R$ 438.230,50
     const r = simularMeta({ orcamento: 25000, cps: 0.2, conversao: 0.0053, ticket: 661.48 });
     expect(r.sessoes).toBeCloseTo(125000, 6);
