@@ -10,6 +10,7 @@ import { dataIso } from '@/domain/carteira';
 import { cn } from '@/lib/utils';
 import { decimal, dataBr, inteiro, mesParaInput, mesPorExtenso, moeda, parseMesInput, percentualFracao } from '@/lib/formatar';
 import { useCarteira } from '@/hooks/consultas';
+import { FONTES_INVESTIMENTO } from '@/config/investimento';
 
 type Aba = 'diario' | 'decendio' | 'mensal';
 
@@ -212,7 +213,10 @@ function TabelaCarteira({ aba, linhas }: { aba: Aba; linhas: LinhaCarteira[] }) 
                     {percentualFracao(linha.funil?.investimento.percentualProjetado ?? null)}
                   </TableCell>
                   <TableCell>
-                    <BadgePesos pesos={linha.funil?.investimento.pesos ?? null} fonte="v_metrics_daily" />
+                    <BadgePesos
+                      pesos={linha.funil?.investimento.pesos ?? null}
+                      fonte={`v_metrics_daily, ${FONTES_INVESTIMENTO.map((f) => f.rotulo).join(' + ')}`}
+                    />
                   </TableCell>
                 </>
               )}

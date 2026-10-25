@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { simularMeta } from '@/domain/calculadora';
 import { dataIso, prefixoMes } from '@/domain/carteira';
+import { FONTES_INVESTIMENTO } from '@/config/investimento';
 import { METRICAS_FUNIL, ROTULO_METRICA, type AcompanhamentoMetrica, type Metrica } from '@/domain/metricas';
 import type { PesosAplicados } from '@/domain/pesos';
 import { mesPorExtenso, moeda, parseMesInput, percentualFracao, inteiro, decimal, dataBr, mesParaInput } from '@/lib/formatar';
@@ -14,7 +15,7 @@ import { NaoEncontrada } from './NaoEncontrada';
 
 const FONTE_PESOS: Record<Metrica, string> = {
   receita: 'GA4, receita',
-  investimento: 'v_metrics_daily, Meta + Google',
+  investimento: `v_metrics_daily, ${FONTES_INVESTIMENTO.map((f) => f.rotulo).join(' + ')}`,
   sessoes: 'GA4, sessões',
   pedidos: 'GA4, transações',
 };
@@ -150,6 +151,7 @@ export function PaginaCliente() {
           <CardDescription>
             Cada métrica com os seus pesos por decêndio do mesmo mês do ano anterior (fallback: d1/d2/d3 da meta).
             Metas de investimento, sessões e pedidos vêm das premissas (orçamento, orçamento ÷ CPS, sessões × conversão).
+            Pedidos (GA4) = transações do GA4; os pedidos aprovados lançados ficam nos lançamentos (receita oficial).
             Ritmo necessário/dia = ponderado: falta × peso do próximo dia ÷ peso dos dias restantes.
           </CardDescription>
         </CardHeader>
@@ -195,6 +197,15 @@ export function PaginaCliente() {
               )}
             </TableBody>
           </Table>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Investimento por fonte:{' '}
+            {linha.investimentoPorFonte
+              .map((p) => {
+                const rotulo = FONTES_INVESTIMENTO.find((f) => f.id === p.fonte)?.rotulo ?? p.fonte;
+                return `${rotulo} ${moeda(p.realizado)}`;
+              })
+              .join(' · ')}
+          </p>
         </CardContent>
       </Card>
 
@@ -432,7 +443,7 @@ export function PaginaCliente() {
                 <TableRow>
                   <TableHead>Período</TableHead>
                   <TableHead>Fonte</TableHead>
-                  <TableHead className="text-right">Pedidos</TableHead>
+                  <TableHead className="text-right">Pedidos aprovados</TableHead>
                   <TableHead className="text-right">Receita</TableHead>
                   <TableHead>Lançado por</TableHead>
                 </TableRow>
