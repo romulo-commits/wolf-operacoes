@@ -12,7 +12,8 @@ import {
   type MetaDiaria,
   type StatusMeta,
 } from './projecao';
-import type { DecendioNumero, MetaMes } from './tipos';
+import { escolherPesos, type PesosAplicados } from './pesos';
+import type { DecendioNumero, MetaMes, PesosDecendio } from './tipos';
 
 export interface EntradaResumoMes {
   meta: MetaMes | null;
@@ -22,6 +23,11 @@ export interface EntradaResumoMes {
   diasNoMes: number;
   /** Receita aprovada do mesmo mês do ano anterior. Null sem histórico lançado. */
   receitaAnoAnterior: number | null;
+  /**
+   * Pesos por decêndio do mesmo mês do ano anterior (pesosHistoricosDecendio).
+   * Null/ausente = usa os pesos d1/d2/d3 da meta (fallback).
+   */
+  pesosHistoricos?: PesosDecendio | null;
 }
 
 export interface ResumoMes {
@@ -30,6 +36,8 @@ export interface ResumoMes {
   realizado: number;
   percentualAtingido: number | null;
   pesoAcumulado: number | null;
+  /** Pesos usados na projeção, nos decêndios e na meta diária, e de onde vieram. */
+  pesos: PesosAplicados | null;
   projecao: number | null;
   percentualProjetado: number | null;
   gapRealizado: number | null;
@@ -55,6 +63,7 @@ export function resumirMes(entrada: EntradaResumoMes): ResumoMes {
       realizado,
       percentualAtingido: null,
       pesoAcumulado: null,
+      pesos: null,
       projecao: null,
       percentualProjetado: null,
       gapRealizado: null,
@@ -67,7 +76,8 @@ export function resumirMes(entrada: EntradaResumoMes): ResumoMes {
     };
   }
 
-  const peso = pesoAcumulado(meta.pesos, diasFechados, diasNoMes);
+  const pesos = escolherPesos(entrada.pesosHistoricos ?? null, meta.pesos, diasNoMes);
+  const peso = pesoAcumulado(pesos.pesos, diasFechados, diasNoMes);
   const projecao = projecaoFechamento(realizado, peso);
   const percentualProjetado = projecao === null ? null : percentualAtingido(projecao, meta.metaReceita);
   const variacaoAnoAnterior =
@@ -81,6 +91,7 @@ export function resumirMes(entrada: EntradaResumoMes): ResumoMes {
     realizado,
     percentualAtingido: percentualAtingido(realizado, meta.metaReceita),
     pesoAcumulado: peso,
+    pesos,
     projecao,
     percentualProjetado,
     gapRealizado: gapRealizado(meta.metaReceita, realizado),
@@ -90,9 +101,9 @@ export function resumirMes(entrada: EntradaResumoMes): ResumoMes {
       meta: meta.metaReceita,
       realizado,
       diasDecorridos: diasFechados,
-      diasNoMes,
+      pesosDiarios: pesos.diarios,
     }),
-    metasDecendio: metasPorDecendio(meta.metaReceita, meta.pesos),
+    metasDecendio: metasPorDecendio(meta.metaReceita, pesos.pesos),
     variacaoAnoAnterior,
     grade: calcularGrade({
       desvioMeta: percentualProjetado === null ? null : percentualProjetado - 1,

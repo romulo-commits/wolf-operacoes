@@ -94,25 +94,55 @@ describe('gap e atingimento', () => {
 });
 
 describe('metaDiariaNecessaria', () => {
-  it('calcula ritmo atual, necessário e aceleração', () => {
+  const uniforme30 = Array.from({ length: 30 }, () => 1 / 30);
+  // D1 = 30%, D2 = 30%, D3 = 40% em 30 dias: 0,03 / 0,03 / 0,04 por dia
+  const ponderado30 = Array.from({ length: 30 }, (_, i) => (i < 20 ? 0.03 : 0.04));
+
+  it('pesos iguais: falta ÷ dias restantes, como antes', () => {
     // Falta 600 em 20 dias = 30/dia · ritmo atual 400 ÷ 10 = 40/dia
-    const r = metaDiariaNecessaria({ meta: 1000, realizado: 400, diasDecorridos: 10, diasNoMes: 30 });
+    // Aceleração = (600 ÷ 20/30) ÷ (400 ÷ 10/30) = 900 ÷ 1200 = 0,75
+    const r = metaDiariaNecessaria({ meta: 1000, realizado: 400, diasDecorridos: 10, pesosDiarios: uniforme30 });
     expect(r.diasRestantes).toBe(20);
     expect(r.necessaria).toBeCloseTo(30, 10);
+    expect(r.necessariaMedia).toBeCloseTo(30, 10);
     expect(r.ritmoAtual).toBeCloseTo(40, 10);
     expect(r.aceleracao).toBeCloseTo(0.75, 10);
   });
 
+  it('distribui o que falta pelos pesos dos dias restantes', () => {
+    // Peso restante = 10 × 0,03 + 10 × 0,04 = 0,70
+    // Dia 11: 600 × 0,03 ÷ 0,70 = 25,714… · Dia 21: 600 × 0,04 ÷ 0,70 = 34,285…
+    const r = metaDiariaNecessaria({ meta: 1000, realizado: 400, diasDecorridos: 10, pesosDiarios: ponderado30 });
+    expect(r.cronograma).toHaveLength(20);
+    expect(r.cronograma[0]).toMatchObject({ dia: 11 });
+    expect(r.necessaria).toBeCloseTo(18 / 0.7, 10);
+    expect(r.cronograma[10].dia).toBe(21);
+    expect(r.cronograma[10].valor).toBeCloseTo(24 / 0.7, 10);
+    const soma = r.cronograma.reduce((t, d) => t + (d.valor ?? 0), 0);
+    expect(soma).toBeCloseTo(600, 8);
+    expect(r.necessariaMedia).toBeCloseTo(30, 10);
+    // (600 ÷ 0,70) ÷ (400 ÷ 0,30) = 857,14 ÷ 1333,33 = 0,642857…
+    expect(r.aceleracao).toBeCloseTo(0.642857142857, 9);
+  });
+
+  it('meta já batida: nada a vender nos dias restantes', () => {
+    const r = metaDiariaNecessaria({ meta: 1000, realizado: 1200, diasDecorridos: 15, pesosDiarios: ponderado30 });
+    expect(r.necessaria).toBe(0);
+    expect(r.aceleracao).toBe(0);
+  });
+
   it('sem dias restantes não há meta diária', () => {
-    const r = metaDiariaNecessaria({ meta: 1000, realizado: 400, diasDecorridos: 30, diasNoMes: 30 });
+    const r = metaDiariaNecessaria({ meta: 1000, realizado: 400, diasDecorridos: 30, pesosDiarios: uniforme30 });
     expect(r.necessaria).toBeNull();
     expect(r.diasRestantes).toBe(0);
+    expect(r.cronograma).toHaveLength(0);
   });
 
   it('sem dias fechados não há ritmo', () => {
-    const r = metaDiariaNecessaria({ meta: 1000, realizado: 0, diasDecorridos: 0, diasNoMes: 30 });
+    const r = metaDiariaNecessaria({ meta: 1000, realizado: 0, diasDecorridos: 0, pesosDiarios: uniforme30 });
     expect(r.ritmoAtual).toBeNull();
     expect(r.aceleracao).toBeNull();
+    expect(r.necessaria).toBeCloseTo(1000 / 30, 10);
   });
 });
 

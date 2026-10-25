@@ -4,14 +4,33 @@ const TOLERANCIA_PESOS = 1e-6;
 
 export type StatusMeta = 'atingida' | 'no_ritmo' | 'em_risco';
 
+export interface DiaNecessario {
+  /** Dia do mês (1 a 31). */
+  dia: number;
+  /** Peso do dia no mês (fração). */
+  peso: number;
+  /** Quanto precisa vender neste dia. Null se os dias restantes não têm peso. */
+  valor: number | null;
+}
+
 export interface MetaDiaria {
-  /** Quanto precisa vender por dia restante para bater a meta. Null sem dias restantes. */
+  /**
+   * Quanto precisa vender no PRÓXIMO dia: falta × (peso do dia ÷ soma dos pesos restantes).
+   * Null sem dias restantes.
+   */
   necessaria: number | null;
+  /** Falta ÷ dias restantes (média simples, só para referência). */
+  necessariaMedia: number | null;
   /** Média por dia já fechado. Null sem dias fechados. */
   ritmoAtual: number | null;
-  /** Necessária ÷ ritmo atual. Acima de 1 = precisa acelerar. */
+  /**
+   * Quanto o ritmo precisa mudar, já descontando o peso dos dias:
+   * (falta ÷ peso restante) ÷ (realizado ÷ peso acumulado). Acima de 1 = precisa acelerar.
+   */
   aceleracao: number | null;
   diasRestantes: number;
+  /** Meta de cada dia restante, distribuída pelos pesos. */
+  cronograma: DiaNecessario[];
 }
 
 /** Dias de cada decêndio: 1–10, 11–20 e 21 até o fim do mês. */
@@ -80,20 +99,47 @@ export function gapProjetado(meta: number, projecao: number | null): number | nu
   return projecao === null ? null : meta - projecao;
 }
 
+/**
+ * Meta diária necessária distribuída pelos pesos dos dias que faltam
+ * (mesmos pesos da projeção: histórico do ano anterior ou fallback da meta).
+ */
 export function metaDiariaNecessaria(entrada: {
   meta: number;
   realizado: number;
   diasDecorridos: number;
-  diasNoMes: number;
+  /** Peso de cada dia do mês (ver pesosDiarios em pesos.ts). O tamanho é o nº de dias do mês. */
+  pesosDiarios: number[];
 }): MetaDiaria {
-  const { meta, realizado, diasDecorridos, diasNoMes } = entrada;
-  const diasRestantes = Math.max(diasNoMes - diasDecorridos, 0);
+  const { meta, realizado, pesosDiarios } = entrada;
+  const totalDias = pesosDiarios.length;
+  const decorridos = Math.min(Math.max(Math.floor(entrada.diasDecorridos), 0), totalDias);
+  const diasRestantes = totalDias - decorridos;
   const falta = Math.max(meta - realizado, 0);
-  const necessaria = diasRestantes > 0 ? falta / diasRestantes : null;
-  const ritmoAtual = diasDecorridos > 0 ? realizado / diasDecorridos : null;
+
+  const restantes = pesosDiarios.slice(decorridos);
+  const pesoRestante = restantes.reduce((soma, peso) => soma + peso, 0);
+  const pesoFeito = pesosDiarios.slice(0, decorridos).reduce((soma, peso) => soma + peso, 0);
+
+  const cronograma: DiaNecessario[] = restantes.map((peso, i) => ({
+    dia: decorridos + 1 + i,
+    peso,
+    valor: falta === 0 ? 0 : pesoRestante > 0 ? (falta * peso) / pesoRestante : null,
+  }));
+
+  const ritmoAtual = decorridos > 0 ? realizado / decorridos : null;
   const aceleracao =
-    necessaria !== null && ritmoAtual !== null && ritmoAtual > 0 ? necessaria / ritmoAtual : null;
-  return { necessaria, ritmoAtual, aceleracao, diasRestantes };
+    diasRestantes > 0 && pesoRestante > 0 && pesoFeito > 0 && realizado > 0
+      ? falta / pesoRestante / (realizado / pesoFeito)
+      : null;
+
+  return {
+    necessaria: cronograma[0]?.valor ?? null,
+    necessariaMedia: diasRestantes > 0 ? falta / diasRestantes : null,
+    ritmoAtual,
+    aceleracao,
+    diasRestantes,
+    cronograma,
+  };
 }
 
 /** Atingida: já bateu. No ritmo: a projeção bate. Em risco: a projeção não bate. */

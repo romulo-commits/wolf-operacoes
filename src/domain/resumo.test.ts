@@ -31,6 +31,26 @@ describe('resumirMes', () => {
     expect(r.status).toBe('no_ritmo');
     expect(r.variacaoAnoAnterior).toBeCloseTo(1, 6);
     expect(r.grade.nota).toBe('G0');
+    // Falta 400; peso restante 0,70; dia 11 pesa 0,03 → 400 × 0,03 ÷ 0,70
+    expect(r.diaria?.necessaria).toBeCloseTo(12 / 0.7, 6);
+    expect(r.pesos?.origem).toBe('meta');
+  });
+
+  it('com histórico do ano anterior, usa os pesos históricos em tudo', () => {
+    // Histórico D1 = 50%, D2 = 25%, D3 = 25% (a meta diz 30/30/40, mas não vale)
+    const r = resumirMes({
+      meta,
+      realizado: 600,
+      diasFechados: 10,
+      diasNoMes: 30,
+      receitaAnoAnterior: 1000,
+      pesosHistoricos: { d1: 0.5, d2: 0.25, d3: 0.25 },
+    });
+    expect(r.pesos?.origem).toBe('historico');
+    expect(r.pesoAcumulado).toBeCloseTo(0.5, 10);
+    expect(r.projecao).toBeCloseTo(1200, 6); // 600 ÷ 0,5
+    expect(r.metasDecendio).toEqual({ 1: 500, 2: 250, 3: 250 });
+    // Falta 400 em peso restante 0,5; dia 11 pesa 0,025 → 400 × 0,025 ÷ 0,5 = 20
     expect(r.diaria?.necessaria).toBeCloseTo(20, 6);
   });
 

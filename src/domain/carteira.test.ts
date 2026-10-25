@@ -80,6 +80,30 @@ describe('montarLinhasCarteira', () => {
     expect(linha.alertas.map((a) => a.tipo)).toEqual(['pdas', 'meta']);
   });
 
+  it('sem GA4 do ano anterior, usa os pesos da meta (fallback)', () => {
+    expect(linha.resumo.pesos?.origem).toBe('meta');
+  });
+
+  it('com GA4 do mesmo mês do ano anterior, projeta pelos pesos históricos', () => {
+    // Out/2025: D1 10 × 50k = 500k · D2 10 × 25k = 250k · D3 11 × 25k = 275k · total 1.025k
+    // Peso até dia 24 = (500 + 250 + 4 × 25) ÷ 1025 = 850 ÷ 1025
+    const historico = Array.from({ length: 31 }, (_, i) => ({
+      clientId: 'argennti',
+      date: `2025-10-${String(i + 1).padStart(2, '0')}`,
+      receita: i < 10 ? 50_000 : 25_000,
+    }));
+    const outroCliente = historico.map((h) => ({ ...h, clientId: 'outro', receita: 1 }));
+    const [comHistorico] = montarLinhasCarteira({ ...base, receitaGa4AnoAnterior: [...historico, ...outroCliente] });
+    const r = comHistorico.resumo;
+    expect(r.pesos?.origem).toBe('historico');
+    expect(r.pesos?.pesos.d1).toBeCloseTo(500 / 1025, 12);
+    expect(r.pesoAcumulado).toBeCloseTo(850 / 1025, 10);
+    expect(r.projecao).toBeCloseTo((1_400_000 * 1025) / 850, 4);
+    expect(r.metasDecendio?.[1]).toBeCloseTo((2_000_000 * 500) / 1025, 4);
+    // Falta 600k; peso restante = 7 dias × 25k ÷ 1025k; cada dia pesa 25 ÷ 1025 → 600k ÷ 7
+    expect(r.diaria?.necessaria).toBeCloseTo(600_000 / 7, 4);
+  });
+
   it('cliente sem meta: linha existe, sem projeção', () => {
     const [semMeta] = montarLinhasCarteira({ ...base, metas: [] });
     expect(semMeta.resumo.temMeta).toBe(false);

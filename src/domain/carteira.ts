@@ -1,6 +1,7 @@
 import { gerarAlertas, type Alerta } from './alertas';
 import { diasFechados, diasNoMes } from './calendario';
 import { indiceTracking, statusTracking, type StatusTracking } from './tracking';
+import { pesosHistoricosDecendio } from './pesos';
 import { resumirMes, type ResumoMes } from './resumo';
 import type { LancamentoReceita, MetaMes } from './tipos';
 
@@ -39,6 +40,11 @@ export interface EntradaCarteira {
   sync: SyncCarteira[];
   pdas: PdaCarteira[];
   receitaGa4: ReceitaGa4Dia[];
+  /**
+   * Receita GA4 diária do MESMO mês do ano anterior (v_analytics_diario).
+   * Base dos pesos históricos. Ausente/vazio = pesos da meta (fallback).
+   */
+  receitaGa4AnoAnterior?: ReceitaGa4Dia[];
 }
 
 export interface LinhaCarteira {
@@ -91,12 +97,19 @@ export function montarLinhasCarteira(entrada: EntradaCarteira): LinhaCarteira[] 
       (l) => l.receitaAprovada,
     );
 
+    const pesosHistoricos = pesosHistoricosDecendio(
+      (entrada.receitaGa4AnoAnterior ?? []).filter((r) => r.clientId === cliente.id),
+      ano - 1,
+      mes,
+    );
+
     const resumo = resumirMes({
       meta,
       realizado,
       diasFechados: diasFechadosMes,
       diasNoMes: diasDoMes,
       receitaAnoAnterior,
+      pesosHistoricos,
     });
 
     const receitaGa4 = somarOuNulo(
