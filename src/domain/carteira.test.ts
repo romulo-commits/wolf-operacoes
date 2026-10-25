@@ -93,7 +93,7 @@ describe('montarLinhasCarteira', () => {
       receita: i < 10 ? 50_000 : 25_000,
     }));
     const outroCliente = historico.map((h) => ({ ...h, clientId: 'outro', receita: 1 }));
-    const [comHistorico] = montarLinhasCarteira({ ...base, receitaGa4AnoAnterior: [...historico, ...outroCliente] });
+    const [comHistorico] = montarLinhasCarteira({ ...base, ga4AnoAnterior: [...historico, ...outroCliente] });
     const r = comHistorico.resumo;
     expect(r.pesos?.origem).toBe('historico');
     expect(r.pesos?.pesos.d1).toBeCloseTo(500 / 1025, 12);
@@ -108,5 +108,71 @@ describe('montarLinhasCarteira', () => {
     const [semMeta] = montarLinhasCarteira({ ...base, metas: [] });
     expect(semMeta.resumo.temMeta).toBe(false);
     expect(semMeta.resumo.grade.nota).toBe('NC');
+    expect(semMeta.funil).toBeNull();
+  });
+
+  describe('funil: investimento, sessões e pedidos com os pesos de cada um', () => {
+    const dia = (ano: number, d: number) => `${ano}-10-${String(d).padStart(2, '0')}`;
+    // GA4 out/2025: sessões 2.000/dia em D1 e 1.000/dia depois (20k + 21k = 41k);
+    // pedidos 10/dia o mês todo (310)
+    const ga4AnoAnterior = Array.from({ length: 31 }, (_, i) => ({
+      clientId: 'argennti',
+      date: dia(2025, i + 1),
+      receita: 10_000,
+      sessoes: i < 10 ? 2000 : 1000,
+      pedidos: 10,
+    }));
+    const [l] = montarLinhasCarteira({
+      ...base,
+      receitaGa4: [
+        ...base.receitaGa4,
+        { clientId: 'argennti', date: '2026-10-05', receita: 0, sessoes: 30_000 },
+        { clientId: 'argennti', date: '2026-10-25', receita: 0, sessoes: 99_999 }, // dia aberto: fora
+      ],
+      ga4AnoAnterior,
+      investimento: [
+        { clientId: 'argennti', date: '2026-10-05', valor: 100_000 },
+        { clientId: 'argennti', date: '2026-10-24', valor: 50_000 },
+        { clientId: 'argennti', date: '2026-10-25', valor: 999 }, // dia aberto: fora
+        { clientId: 'outro', date: '2026-10-05', valor: 7 },
+      ],
+      // sem investimento do ano anterior → investimento cai no fallback
+    });
+    const f = l.funil!;
+
+    it('metas pela calculadora: 577.000 · 577.000 ÷ 0,91 · × 1,43%', () => {
+      expect(f.investimento.meta).toBe(577_000);
+      expect(f.sessoes.meta).toBeCloseTo(577_000 / 0.91, 6); // 634.065,93
+      expect(f.pedidos.meta).toBeCloseTo((577_000 / 0.91) * 0.0143, 6); // 9.067,14
+    });
+
+    it('realizado só até o último dia fechado (24/10) e só do cliente', () => {
+      expect(f.investimento.realizado).toBe(150_000);
+      expect(f.sessoes.realizado).toBe(30_000); // linhas sem sessões não contam
+      expect(f.pedidos.realizado).toBe(3); // pedidos aprovados lançados no mês
+    });
+
+    it('cada métrica com a sua origem de pesos', () => {
+      expect(f.investimento.pesos.origem).toBe('meta');
+      expect(f.investimento.pesoAcumulado).toBeCloseTo(0.79, 12); // 0,33 + 0,34 + 0,33 × 4/11
+      expect(f.sessoes.pesos.origem).toBe('historico');
+      expect(f.sessoes.pesos.pesos.d1).toBeCloseTo(20 / 41, 12);
+      // Peso até dia 24 = (20k + 10k + 4k) ÷ 41k
+      expect(f.sessoes.pesoAcumulado).toBeCloseTo(34 / 41, 12);
+      expect(f.pedidos.pesos.origem).toBe('historico');
+      expect(f.pedidos.pesoAcumulado).toBeCloseTo(24 / 31, 12);
+    });
+
+    it('esperado, projeção e ritmo necessário de investimento (fallback)', () => {
+      expect(f.investimento.esperadoAteAgora).toBeCloseTo(577_000 * 0.79, 6); // 455.830
+      expect(f.investimento.projecao).toBeCloseTo(150_000 / 0.79, 6); // 189.873,42
+      // Dias 25–31 em D3: cada um pesa 0,33/11 → falta 427.000 ÷ 7
+      expect(f.investimento.diaria?.necessaria).toBeCloseTo(427_000 / 7, 6);
+    });
+
+    it('ritmo necessário de pedidos ponderado (todos os dias pesam 1/31)', () => {
+      const falta = (577_000 / 0.91) * 0.0143 - 3;
+      expect(f.pedidos.diaria?.necessaria).toBeCloseTo(falta / 7, 6);
+    });
   });
 });

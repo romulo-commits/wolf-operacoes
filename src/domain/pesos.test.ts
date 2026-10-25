@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { decendioDoDia, escolherPesos, pesosDiarios, pesosHistoricosDecendio, type ReceitaDiaria } from './pesos';
+import { decendioDoDia, escolherPesos, pesosDiarios, pesosHistoricosDecendio, type SerieDiaria } from './pesos';
 
 /** Receita por dia em D1, D2 e D3 para um mês inteiro. */
-function mes(prefixo: string, totalDias: number, porDecendio: [number, number, number]): ReceitaDiaria[] {
+function mes(prefixo: string, totalDias: number, porDecendio: [number, number, number]): SerieDiaria[] {
   return Array.from({ length: totalDias }, (_, i) => ({
     date: `${prefixo}-${String(i + 1).padStart(2, '0')}`,
-    receita: porDecendio[decendioDoDia(i + 1) - 1],
+    valor: porDecendio[decendioDoDia(i + 1) - 1],
   }));
 }
 
@@ -31,7 +31,7 @@ describe('pesosHistoricosDecendio', () => {
   });
 
   it('ignora dias de outros meses', () => {
-    const dados = [...mes('2025-10', 31, [1, 1, 1]), { date: '2025-11-01', receita: 1_000_000 }];
+    const dados = [...mes('2025-10', 31, [1, 1, 1]), { date: '2025-11-01', valor: 1_000_000 }];
     const p = pesosHistoricosDecendio(dados, 2025, 10);
     expect(p?.d3).toBeCloseTo(11 / 31, 12);
   });

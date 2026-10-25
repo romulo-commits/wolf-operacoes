@@ -18,10 +18,11 @@ import type { DecendioNumero, PesosDecendio } from './tipos';
 
 export type OrigemPesos = 'historico' | 'meta';
 
-export interface ReceitaDiaria {
+/** Valor diário de uma métrica (receita, investimento, sessões ou pedidos). */
+export interface SerieDiaria {
   /** AAAA-MM-DD */
   date: string;
-  receita: number;
+  valor: number;
 }
 
 export interface PesosAplicados {
@@ -42,25 +43,26 @@ export function decendioDoDia(dia: number): DecendioNumero {
 }
 
 /**
- * Pesos por decêndio a partir da receita diária do mês de referência (normalmente
- * o mesmo mês do ano anterior). Várias linhas no mesmo dia (canais do GA4) são somadas.
+ * Pesos por decêndio de uma métrica a partir da série diária do mês de referência (normalmente
+ * o mesmo mês do ano anterior). Várias linhas no mesmo dia (canais do GA4, plataformas de mídia)
+ * são somadas. Vale para receita, investimento, sessões e pedidos: cada uma tem os seus pesos.
  *
- * Devolve null (usar o fallback) quando: receita total ≤ 0, menos de 80% dos dias com dado,
+ * Devolve null (usar o fallback) quando: total ≤ 0, menos de 80% dos dias com dado,
  * ou algum decêndio sem nenhum dia com dado.
  */
 export function pesosHistoricosDecendio(
-  receitaDiaria: ReceitaDiaria[],
+  serie: SerieDiaria[],
   ano: number,
   mes: number,
 ): PesosDecendio | null {
   const prefixo = `${ano}-${String(mes).padStart(2, '0')}-`;
   const totalDias = diasNoMes(ano, mes);
   const porDia = new Map<number, number>();
-  for (const linha of receitaDiaria) {
+  for (const linha of serie) {
     if (!linha.date.startsWith(prefixo)) continue;
     const dia = Number(linha.date.slice(8, 10));
     if (!Number.isInteger(dia) || dia < 1 || dia > totalDias) continue;
-    const valor = Number.isFinite(linha.receita) ? linha.receita : 0;
+    const valor = Number.isFinite(linha.valor) ? linha.valor : 0;
     porDia.set(dia, (porDia.get(dia) ?? 0) + valor);
   }
 

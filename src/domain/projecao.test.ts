@@ -104,7 +104,6 @@ describe('metaDiariaNecessaria', () => {
     const r = metaDiariaNecessaria({ meta: 1000, realizado: 400, diasDecorridos: 10, pesosDiarios: uniforme30 });
     expect(r.diasRestantes).toBe(20);
     expect(r.necessaria).toBeCloseTo(30, 10);
-    expect(r.necessariaMedia).toBeCloseTo(30, 10);
     expect(r.ritmoAtual).toBeCloseTo(40, 10);
     expect(r.aceleracao).toBeCloseTo(0.75, 10);
   });
@@ -120,7 +119,6 @@ describe('metaDiariaNecessaria', () => {
     expect(r.cronograma[10].valor).toBeCloseTo(24 / 0.7, 10);
     const soma = r.cronograma.reduce((t, d) => t + (d.valor ?? 0), 0);
     expect(soma).toBeCloseTo(600, 8);
-    expect(r.necessariaMedia).toBeCloseTo(30, 10);
     // (600 ÷ 0,70) ÷ (400 ÷ 0,30) = 857,14 ÷ 1333,33 = 0,642857…
     expect(r.aceleracao).toBeCloseTo(0.642857142857, 9);
   });

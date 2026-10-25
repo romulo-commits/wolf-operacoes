@@ -15,13 +15,12 @@ export interface DiaNecessario {
 
 export interface MetaDiaria {
   /**
-   * Quanto precisa vender no PRÓXIMO dia: falta × (peso do dia ÷ soma dos pesos restantes).
-   * Null sem dias restantes.
+   * Ritmo necessário por dia (PONDERADO), lido para o PRÓXIMO dia:
+   * falta × (peso do dia ÷ soma dos pesos restantes). Null sem dias restantes.
+   * Não existe média simples (falta ÷ dias): o ritmo é sempre o ponderado; os demais dias estão no cronograma.
    */
   necessaria: number | null;
-  /** Falta ÷ dias restantes (média simples, só para referência). */
-  necessariaMedia: number | null;
-  /** Média por dia já fechado. Null sem dias fechados. */
+  /** Ritmo ATUAL: realizado ÷ dias já fechados (o que já aconteceu). Null sem dias fechados. */
   ritmoAtual: number | null;
   /**
    * Quanto o ritmo precisa mudar, já descontando o peso dos dias:
@@ -134,7 +133,6 @@ export function metaDiariaNecessaria(entrada: {
 
   return {
     necessaria: cronograma[0]?.valor ?? null,
-    necessariaMedia: diasRestantes > 0 ? falta / diasRestantes : null,
     ritmoAtual,
     aceleracao,
     diasRestantes,
