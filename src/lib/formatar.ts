@@ -15,10 +15,12 @@ export function moeda(valor: number | null, comCentavos = false): string {
   return (comCentavos ? moedaBrlCentavos : moedaBrl).format(valor);
 }
 
-/** Fração em percentual: 0,123 → "12,3%". */
-export function percentualFracao(valor: number | null): string {
+const percentual2 = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 2 });
+
+/** Fração em percentual: 0,123 → "12,3%". Com `casas = 2`: 0,0151 → "1,51%" (taxa de conversão). */
+export function percentualFracao(valor: number | null, casas: 1 | 2 = 1): string {
   if (valor === null || !Number.isFinite(valor)) return SEM_VALOR;
-  return percentual.format(valor);
+  return (casas === 2 ? percentual2 : percentual).format(valor);
 }
 
 export function inteiro(valor: number | null): string {

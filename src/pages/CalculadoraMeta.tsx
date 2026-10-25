@@ -116,7 +116,7 @@ function MetaDefinida({
             <Linha rotulo="Meta de receita" valor={moeda(metaAtual.metaReceita)} />
             <Linha rotulo="Orçamento" valor={moeda(metaAtual.premissas.orcamento)} />
             <Linha rotulo="CPS" valor={moeda(metaAtual.premissas.cps, true)} />
-            <Linha rotulo="Conversão" valor={percentualFracao(metaAtual.premissas.conversao)} />
+            <Linha rotulo="Conversão" valor={percentualFracao(metaAtual.premissas.conversao, 2)} />
             <Linha rotulo="Ticket médio" valor={moeda(metaAtual.premissas.ticket, true)} />
             <Linha rotulo="Pesos D1 / D2 / D3 (só sem histórico)" valor={`${percentualFracao(metaAtual.pesos.d1)} / ${percentualFracao(metaAtual.pesos.d2)} / ${percentualFracao(metaAtual.pesos.d3)}`} />
             <Linha rotulo="Última alteração" valor={metaAtual.motivoAlteracao ? `${metaAtual.motivoAlteracao} (${metaAtual.updatedBy ?? '—'}, ${dataBr(metaAtual.updatedAt?.slice(0, 10) ?? null)})` : 'Definição original'} />

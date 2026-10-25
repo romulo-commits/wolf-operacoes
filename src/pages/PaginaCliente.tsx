@@ -353,7 +353,7 @@ export function PaginaCliente() {
                   </TableRow>
                   <TableRow>
                     <TableCell>Conversão</TableCell>
-                    <TableCell className="text-right">{percentualFracao(meta.premissas.conversao)}</TableCell>
+                    <TableCell className="text-right">{percentualFracao(meta.premissas.conversao, 2)}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Pedidos</TableCell>
