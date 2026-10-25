@@ -18,7 +18,7 @@ export const ROTULO_METRICA: Record<Metrica, string> = {
   receita: 'Receita',
   investimento: 'Investimento',
   sessoes: 'Sessões',
-  pedidos: 'Pedidos',
+  pedidos: 'Pedidos (GA4)',
 };
 
 export interface AcompanhamentoMetrica {

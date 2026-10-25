@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { consolidarSync, lerDoWolfos, type SyncPlataforma } from './carteira';
+import { consolidarSync, lerDoWolfos, lerInvestimento, type SyncPlataforma } from './carteira';
 import type { LeituraWolfos, OpcoesLeitura } from './leitura';
 import { lerConfigWolfos } from './conexao';
 import { dadosExemplo } from './exemplo';
@@ -79,7 +79,9 @@ describe('dadosExemplo · ano anterior', () => {
   it('traz investimento do ano anterior só da Argennti (Exemplo A mostra o fallback de investimento)', () => {
     const clientes = new Set(dados.investimentoAnoAnterior.map((r) => r.clientId));
     expect([...clientes]).toEqual([CLIENTE_ARGENNTI_ID]);
-    expect(dados.investimento.filter((r) => r.clientId === CLIENTE_ARGENNTI_ID)).toHaveLength(24);
+    const mes = dados.investimento.filter((r) => r.clientId === CLIENTE_ARGENNTI_ID);
+    expect(mes).toHaveLength(48); // 24 dias × Meta e Google
+    expect(new Set(mes.map((r) => r.fonte))).toEqual(new Set(['meta', 'google']));
   });
 
   it('o Exemplo B fica sem histórico para mostrar o fallback', () => {
@@ -94,7 +96,10 @@ describe('lerDoWolfos · leituras de mídia e GA4 (somente select, leitor falso)
       { client_id: 'c1', date: '2026-10-01', revenue: '100', sessions: '50', transactions: '2' },
       { client_id: 'c1', date: '2026-10-02', revenue: 10, sessions: null, transactions: null },
     ],
-    'v_metrics_daily:2025-10-01': [{ client_id: 'c1', date: '2025-10-03', spend: '12.5' }],
+    'v_metrics_daily:2025-10-01': [
+      { client_id: 'c1', date: '2025-10-03', platform: 'meta', spend: '12.5' },
+      { client_id: 'c1', date: '2025-10-03', platform: 'google', spend: 7 },
+    ],
   };
   const leitor = (banco: string): LeituraWolfos => ({
     async selecionarTodos<T>(tabela: string, opcoes: OpcoesLeitura): Promise<T[]> {
@@ -113,7 +118,7 @@ describe('lerDoWolfos · leituras de mídia e GA4 (somente select, leitor falso)
     ]);
     const midia = chamadas.filter((c) => c.tabela === 'v_metrics_daily');
     expect(midia).toHaveLength(2);
-    expect(midia.every((c) => c.banco === 'ads' && c.opcoes.colunas === 'client_id,date,spend')).toBe(true);
+    expect(midia.every((c) => c.banco === 'ads' && c.opcoes.colunas === 'client_id,date,platform,spend')).toBe(true);
     expect(midia[0].opcoes.filtros).toContainEqual({ coluna: 'platform', op: 'in', valor: ['meta', 'google'] });
     expect(midia.map((c) => c.opcoes.filtros?.filter((f) => f.coluna === 'date').map((f) => f.valor))).toEqual([
       ['2026-10-01', '2026-10-25'],
@@ -122,7 +127,31 @@ describe('lerDoWolfos · leituras de mídia e GA4 (somente select, leitor falso)
 
     expect(dados.receitaGa4[0]).toEqual({ clientId: 'c1', date: '2026-10-01', receita: 100, sessoes: 50, pedidos: 2 });
     expect(dados.receitaGa4[1].sessoes).toBeUndefined(); // nulo = sem dado
-    expect(dados.investimentoAnoAnterior).toEqual([{ clientId: 'c1', date: '2025-10-03', valor: 12.5 }]);
+    expect(dados.investimentoAnoAnterior).toEqual([
+      { clientId: 'c1', date: '2025-10-03', fonte: 'meta', valor: 12.5 },
+      { clientId: 'c1', date: '2025-10-03', fonte: 'google', valor: 7 },
+    ]);
     expect(dados.investimento).toEqual([]);
+  });
+});
+
+describe('lerInvestimento · fontes configuráveis', () => {
+  it('filtra e rotula pelas fontes passadas (ex.: TikTok acrescentado na config)', async () => {
+    const chamadas: OpcoesLeitura[] = [];
+    const ads: LeituraWolfos = {
+      async selecionarTodos<T>(_tabela: string, opcoes: OpcoesLeitura): Promise<T[]> {
+        chamadas.push(opcoes);
+        return [
+          { client_id: 'c1', date: '2026-10-01', platform: 'tiktok', spend: '30' },
+          { client_id: 'c1', date: '2026-10-01', platform: 'pinterest', spend: '99' }, // fora da lista
+        ] as T[];
+      },
+    };
+    const linhas = await lerInvestimento({ ads, dev: ads }, '2026-10-01', '2026-10-24', [
+      { id: 'tiktok', rotulo: 'TikTok Ads', origem: 'v_metrics_daily', platform: 'tiktok' },
+    ]);
+    expect(chamadas).toHaveLength(1);
+    expect(chamadas[0].filtros?.[0]).toEqual({ coluna: 'platform', op: 'in', valor: ['tiktok'] });
+    expect(linhas).toEqual([{ clientId: 'c1', date: '2026-10-01', fonte: 'tiktok', valor: 30 }]);
   });
 });

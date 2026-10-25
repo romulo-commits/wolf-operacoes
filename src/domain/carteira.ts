@@ -1,6 +1,7 @@
 import { gerarAlertas, type Alerta } from './alertas';
 import { diasFechados, diasNoMes } from './calendario';
 import { indiceTracking, statusTracking, type StatusTracking } from './tracking';
+import { IDS_FONTES_INVESTIMENTO } from '../config/investimento';
 import { acompanharMetrica, metasDoFunil, METRICAS_FUNIL, type AcompanhamentoMetrica, type MetricaFunil } from './metricas';
 import { pesosHistoricosDecendio, type SerieDiaria } from './pesos';
 import { resumirMes, type ResumoMes } from './resumo';
@@ -36,12 +37,20 @@ export interface ReceitaGa4Dia {
   pedidos?: number;
 }
 
-/** Investimento diário em mídia por cliente (soma das plataformas). */
+/** Investimento diário em mídia por cliente e fonte (ver src/config/investimento.ts). */
 export interface InvestimentoDia {
   clientId: string;
   /** AAAA-MM-DD */
   date: string;
+  /** Id da fonte (`FonteInvestimento.id`, ex.: 'meta', 'google'). */
+  fonte: string;
   valor: number;
+}
+
+/** Investimento realizado do mês (até o último dia fechado) de uma fonte. Null = sem dado. */
+export interface InvestimentoFonte {
+  fonte: string;
+  realizado: number | null;
 }
 
 export interface EntradaCarteira {
@@ -63,6 +72,11 @@ export interface EntradaCarteira {
   investimento?: InvestimentoDia[];
   /** Investimento diário do mesmo mês do ano anterior. Base dos pesos de investimento. */
   investimentoAnoAnterior?: InvestimentoDia[];
+  /**
+   * Fontes de investimento somadas no cálculo. Padrão: as de src/config/investimento.ts.
+   * Linhas de outras fontes são ignoradas.
+   */
+  fontesInvestimento?: string[];
 }
 
 export interface LinhaCarteira {
@@ -71,6 +85,8 @@ export interface LinhaCarteira {
   resumo: ResumoMes;
   /** Investimento, sessões e pedidos com os pesos históricos de cada um. Null sem meta. */
   funil: Record<MetricaFunil, AcompanhamentoMetrica> | null;
+  /** Investimento do mês por fonte configurada, na ordem da configuração. */
+  investimentoPorFonte: InvestimentoFonte[];
   receitaGa4: number | null;
   indiceTracking: number | null;
   statusTracking: StatusTracking;
@@ -133,6 +149,21 @@ export function montarLinhasCarteira(entrada: EntradaCarteira): LinhaCarteira[] 
       pesosHistoricos,
     });
 
+    const fontes = entrada.fontesInvestimento ?? IDS_FONTES_INVESTIMENTO;
+    const daFonte = (r: InvestimentoDia) => r.clientId === cliente.id && fontes.includes(r.fonte);
+    const investimentoMes = (entrada.investimento ?? []).filter(daFonte);
+    const prefixoAtual = `${periodoAtual}-`;
+    const investimentoFechado = investimentoMes.filter(
+      (r) => r.date.startsWith(prefixoAtual) && Number(r.date.slice(8, 10)) <= diasFechadosMes,
+    );
+    const investimentoPorFonte = fontes.map((fonte) => ({
+      fonte,
+      realizado: somarOuNulo(
+        investimentoFechado.filter((r) => r.fonte === fonte),
+        (r) => r.valor,
+      ),
+    }));
+
     const funil = meta
       ? montarFunil({
           meta,
@@ -140,14 +171,10 @@ export function montarLinhasCarteira(entrada: EntradaCarteira): LinhaCarteira[] 
           mes,
           diasFechados: diasFechadosMes,
           diasNoMes: diasDoMes,
-          pedidosLancados: somar(
-            entrada.lancamentos.filter((l) => l.clientId === cliente.id && l.periodoInicio.startsWith(periodoAtual)),
-            (l) => l.pedidosAprovados,
-          ),
           ga4Mes: entrada.receitaGa4.filter((r) => r.clientId === cliente.id),
           ga4AnoAnterior,
-          investimentoMes: (entrada.investimento ?? []).filter((r) => r.clientId === cliente.id),
-          investimentoAnoAnterior: (entrada.investimentoAnoAnterior ?? []).filter((r) => r.clientId === cliente.id),
+          investimentoMes,
+          investimentoAnoAnterior: (entrada.investimentoAnoAnterior ?? []).filter(daFonte),
         })
       : null;
 
@@ -174,6 +201,7 @@ export function montarLinhasCarteira(entrada: EntradaCarteira): LinhaCarteira[] 
       nome: cliente.nome,
       resumo,
       funil,
+      investimentoPorFonte,
       receitaGa4,
       indiceTracking: indice,
       statusTracking: tracking,
@@ -189,7 +217,8 @@ export function montarLinhasCarteira(entrada: EntradaCarteira): LinhaCarteira[] 
 /**
  * Investimento, sessões e pedidos. Metas pela calculadora; pesos de cada métrica pelo
  * mesmo mês do ano anterior (fallback: d1/d2/d3 da meta). Realizado até o último dia fechado:
- * investimento (v_metrics_daily), sessões (GA4) e pedidos aprovados lançados (como a receita).
+ * investimento (soma das fontes configuradas), sessões (GA4) e pedidos = transações do GA4.
+ * Os pedidos aprovados lançados continuam só no contexto da receita oficial (lançamentos).
  */
 function montarFunil(e: {
   meta: MetaMes;
@@ -197,7 +226,6 @@ function montarFunil(e: {
   mes: number;
   diasFechados: number;
   diasNoMes: number;
-  pedidosLancados: number;
   ga4Mes: ReceitaGa4Dia[];
   ga4AnoAnterior: ReceitaGa4Dia[];
   investimentoMes: InvestimentoDia[];
@@ -208,10 +236,11 @@ function montarFunil(e: {
   const fechado = (date: string) => date.startsWith(prefixo) && Number(date.slice(8, 10)) <= e.diasFechados;
 
   const ga4Sessoes = e.ga4Mes.filter((r) => r.sessoes !== undefined && fechado(r.date));
+  const ga4Pedidos = e.ga4Mes.filter((r) => r.pedidos !== undefined && fechado(r.date));
   const realizados: Record<MetricaFunil, number | null> = {
     investimento: somarOuNulo(e.investimentoMes.filter((r) => fechado(r.date)), (r) => r.valor),
     sessoes: somarOuNulo(ga4Sessoes, (r) => r.sessoes ?? 0),
-    pedidos: e.pedidosLancados,
+    pedidos: somarOuNulo(ga4Pedidos, (r) => r.pedidos ?? 0),
   };
   const historicos: Record<MetricaFunil, SerieDiaria[]> = {
     investimento: e.investimentoAnoAnterior.map((r) => ({ date: r.date, valor: r.valor })),

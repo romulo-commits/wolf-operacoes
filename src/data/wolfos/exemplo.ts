@@ -30,12 +30,12 @@ function distribuirPorDia(
   }));
 }
 
+/** Investimento do mês de exemplo: 60% Meta e 40% Google, dividido igualmente pelos 24 dias. */
 function investimentoPorDia(clientId: string, prefixo: string, total: number): InvestimentoDia[] {
-  return Array.from({ length: DIAS_COM_DADO }, (_, i) => ({
-    clientId,
-    date: `${prefixo}-${dia2(i + 1)}`,
-    valor: total / DIAS_COM_DADO,
-  }));
+  return Array.from({ length: DIAS_COM_DADO }, (_, i) => [
+    { clientId, date: `${prefixo}-${dia2(i + 1)}`, fonte: 'meta', valor: (total * 0.6) / DIAS_COM_DADO },
+    { clientId, date: `${prefixo}-${dia2(i + 1)}`, fonte: 'google', valor: (total * 0.4) / DIAS_COM_DADO },
+  ]).flat();
 }
 
 type PorDecendio = [number, number, number];
@@ -64,11 +64,15 @@ function historicoGa4(
 }
 
 function historicoInvestimento(clientId: string, prefixo: string, totalDias: number, porDecendio: PorDecendio): InvestimentoDia[] {
-  return Array.from({ length: totalDias }, (_, i) => ({
-    clientId,
-    date: `${prefixo}-${dia2(i + 1)}`,
-    valor: porDecendio[indiceDecendio(i + 1)],
-  }));
+  // Ano anterior de exemplo: 60% Meta e 40% Google.
+  return Array.from({ length: totalDias }, (_, i) => {
+    const valor = porDecendio[indiceDecendio(i + 1)];
+    const date = `${prefixo}-${dia2(i + 1)}`;
+    return [
+      { clientId, date, fonte: 'meta', valor: valor * 0.6 },
+      { clientId, date, fonte: 'google', valor: valor * 0.4 },
+    ];
+  }).flat();
 }
 
 export function dadosExemplo(ano: number, mes: number): DadosWolfos {

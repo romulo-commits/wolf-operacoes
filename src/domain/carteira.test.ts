@@ -122,20 +122,23 @@ describe('montarLinhasCarteira', () => {
       sessoes: i < 10 ? 2000 : 1000,
       pedidos: 10,
     }));
+    const investimento = [
+      { clientId: 'argennti', date: '2026-10-05', fonte: 'meta', valor: 100_000 },
+      { clientId: 'argennti', date: '2026-10-24', fonte: 'google', valor: 50_000 },
+      { clientId: 'argennti', date: '2026-10-10', fonte: 'tiktok', valor: 8_000 }, // fonte não configurada
+      { clientId: 'argennti', date: '2026-10-25', fonte: 'meta', valor: 999 }, // dia aberto: fora
+      { clientId: 'outro', date: '2026-10-05', fonte: 'meta', valor: 7 },
+    ];
     const [l] = montarLinhasCarteira({
       ...base,
       receitaGa4: [
         ...base.receitaGa4,
-        { clientId: 'argennti', date: '2026-10-05', receita: 0, sessoes: 30_000 },
-        { clientId: 'argennti', date: '2026-10-25', receita: 0, sessoes: 99_999 }, // dia aberto: fora
+        { clientId: 'argennti', date: '2026-10-05', receita: 0, sessoes: 30_000, pedidos: 400 },
+        { clientId: 'argennti', date: '2026-10-12', receita: 0, pedidos: 20 },
+        { clientId: 'argennti', date: '2026-10-25', receita: 0, sessoes: 99_999, pedidos: 999 }, // dia aberto: fora
       ],
       ga4AnoAnterior,
-      investimento: [
-        { clientId: 'argennti', date: '2026-10-05', valor: 100_000 },
-        { clientId: 'argennti', date: '2026-10-24', valor: 50_000 },
-        { clientId: 'argennti', date: '2026-10-25', valor: 999 }, // dia aberto: fora
-        { clientId: 'outro', date: '2026-10-05', valor: 7 },
-      ],
+      investimento,
       // sem investimento do ano anterior → investimento cai no fallback
     });
     const f = l.funil!;
@@ -147,9 +150,32 @@ describe('montarLinhasCarteira', () => {
     });
 
     it('realizado só até o último dia fechado (24/10) e só do cliente', () => {
-      expect(f.investimento.realizado).toBe(150_000);
+      expect(f.investimento.realizado).toBe(150_000); // Meta 100k + Google 50k; TikTok fora da config
       expect(f.sessoes.realizado).toBe(30_000); // linhas sem sessões não contam
-      expect(f.pedidos.realizado).toBe(3); // pedidos aprovados lançados no mês
+      expect(f.pedidos.realizado).toBe(420); // transações do GA4 (400 + 20), não os 3 pedidos lançados
+    });
+
+    it('quebra do investimento por fonte configurada (Meta, Google)', () => {
+      expect(l.investimentoPorFonte).toEqual([
+        { fonte: 'meta', realizado: 100_000 },
+        { fonte: 'google', realizado: 50_000 },
+      ]);
+    });
+
+    it('fonte nova entra no cálculo só pela configuração, sem mudar o domínio', () => {
+      const [comTiktok] = montarLinhasCarteira({
+        ...base,
+        investimento,
+        fontesInvestimento: ['meta', 'google', 'tiktok'],
+      });
+      expect(comTiktok.funil?.investimento.realizado).toBe(158_000);
+      expect(comTiktok.investimentoPorFonte.map((p) => p.realizado)).toEqual([100_000, 50_000, 8_000]);
+    });
+
+    it('sem transações do GA4 no mês, pedidos ficam sem dado (não usa os lançamentos)', () => {
+      const [semGa4] = montarLinhasCarteira({ ...base, ga4AnoAnterior });
+      expect(semGa4.funil?.pedidos.realizado).toBeNull();
+      expect(semGa4.funil?.pedidos.diaria).toBeNull();
     });
 
     it('cada métrica com a sua origem de pesos', () => {
@@ -171,8 +197,11 @@ describe('montarLinhasCarteira', () => {
     });
 
     it('ritmo necessário de pedidos ponderado (todos os dias pesam 1/31)', () => {
-      const falta = (577_000 / 0.91) * 0.0143 - 3;
+      // Meta 9.067,14 − 420 = 8.647,14; 7 dias iguais → 1.235,31 por dia
+      const falta = (577_000 / 0.91) * 0.0143 - 420;
       expect(f.pedidos.diaria?.necessaria).toBeCloseTo(falta / 7, 6);
+      // Projeção = 420 ÷ (24/31) = 542,5
+      expect(f.pedidos.projecao).toBeCloseTo(542.5, 9);
     });
   });
 });

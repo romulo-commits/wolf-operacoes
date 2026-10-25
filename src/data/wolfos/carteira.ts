@@ -1,6 +1,7 @@
 import type { ClienteCarteira, InvestimentoDia, PdaCarteira, ReceitaGa4Dia, SyncCarteira } from '@/domain/carteira';
 import { dataIso, prefixoMes } from '@/domain/carteira';
 import { diasNoMes } from '@/domain/calendario';
+import { FONTES_INVESTIMENTO, type FonteInvestimento } from '@/config/investimento';
 import { obterLeiturasWolfos, type LeiturasWolfos } from './conexao';
 import { dadosExemplo } from './exemplo';
 
@@ -24,14 +25,12 @@ export interface DadosWolfos {
   receitaGa4: ReceitaGa4Dia[];
   /** GA4 diário do mesmo mês do ano anterior: pesos históricos de receita, sessões e pedidos. */
   ga4AnoAnterior: ReceitaGa4Dia[];
-  /** Investimento diário do mês (Meta + Google). */
+  /** Investimento diário do mês, por fonte configurada (src/config/investimento.ts). */
   investimento: InvestimentoDia[];
   /** Investimento diário do mesmo mês do ano anterior: pesos históricos de investimento. */
   investimentoAnoAnterior: InvestimentoDia[];
 }
 
-/** Plataformas de mídia somadas no investimento. */
-export const PLATAFORMAS_MIDIA = ['meta', 'google'];
 
 interface LinhaCliente {
   id: string;
@@ -62,6 +61,7 @@ interface LinhaGa4 {
 interface LinhaMidia {
   client_id: string;
   date: string;
+  platform: string;
   spend: number | string | null;
 }
 
@@ -120,25 +120,9 @@ export async function lerDoWolfos(
       ],
       ordenarPor: 'date',
     }),
-    // Investimento do mês e do mesmo mês do ano anterior (somente leitura).
-    leituras.ads.selecionarTodos<LinhaMidia>('v_metrics_daily', {
-      colunas: 'client_id,date,spend',
-      filtros: [
-        { coluna: 'platform', op: 'in', valor: PLATAFORMAS_MIDIA },
-        { coluna: 'date', op: 'gte', valor: `${prefixo}-01` },
-        { coluna: 'date', op: 'lte', valor: dataIso(hoje) },
-      ],
-      ordenarPor: 'date',
-    }),
-    leituras.ads.selecionarTodos<LinhaMidia>('v_metrics_daily', {
-      colunas: 'client_id,date,spend',
-      filtros: [
-        { coluna: 'platform', op: 'in', valor: PLATAFORMAS_MIDIA },
-        { coluna: 'date', op: 'gte', valor: `${prefixoAnoAnterior}-01` },
-        { coluna: 'date', op: 'lte', valor: `${prefixoAnoAnterior}-${ultimoDiaAnoAnterior}` },
-      ],
-      ordenarPor: 'date',
-    }),
+    // Investimento do mês e do mesmo mês do ano anterior (somente leitura), pelas fontes configuradas.
+    lerInvestimento(leituras, `${prefixo}-01`, dataIso(hoje)),
+    lerInvestimento(leituras, `${prefixoAnoAnterior}-01`, `${prefixoAnoAnterior}-${ultimoDiaAnoAnterior}`),
   ]);
 
   const paraReceita = (r: LinhaGa4): ReceitaGa4Dia => ({
@@ -147,11 +131,6 @@ export async function lerDoWolfos(
     receita: Number(r.revenue ?? 0),
     sessoes: r.sessions === null ? undefined : Number(r.sessions),
     pedidos: r.transactions === null ? undefined : Number(r.transactions),
-  });
-  const paraInvestimento = (r: LinhaMidia): InvestimentoDia => ({
-    clientId: r.client_id,
-    date: r.date,
-    valor: Number(r.spend ?? 0),
   });
 
   return {
@@ -167,9 +146,47 @@ export async function lerDoWolfos(
     pdas: pdas.map((p) => ({ clientId: p.client_id, dueDate: p.due_date })),
     receitaGa4: ga4.map(paraReceita),
     ga4AnoAnterior: ga4AnoAnterior.map(paraReceita),
-    investimento: midia.map(paraInvestimento),
-    investimentoAnoAnterior: midiaAnoAnterior.map(paraInvestimento),
+    investimento: midia,
+    investimentoAnoAnterior: midiaAnoAnterior,
   };
+}
+
+/**
+ * Investimento diário de todas as fontes configuradas entre `inicio` e `fim` (inclusive).
+ * Agrupa as fontes por origem e faz um select por origem. Hoje só `v_metrics_daily`, filtrando
+ * `platform` pelas plataformas das fontes. Para uma origem nova, acrescente o case aqui.
+ */
+export async function lerInvestimento(
+  leituras: LeiturasWolfos,
+  inicio: string,
+  fim: string,
+  fontes: readonly FonteInvestimento[] = FONTES_INVESTIMENTO,
+): Promise<InvestimentoDia[]> {
+  const origens = [...new Set(fontes.map((f) => f.origem))];
+  const partes = await Promise.all(
+    origens.map(async (origem): Promise<InvestimentoDia[]> => {
+      const daOrigem = fontes.filter((f) => f.origem === origem);
+      switch (origem) {
+        case 'v_metrics_daily': {
+          const porPlataforma = new Map(daOrigem.map((f) => [f.platform, f.id] as const));
+          const linhas = await leituras.ads.selecionarTodos<LinhaMidia>('v_metrics_daily', {
+            colunas: 'client_id,date,platform,spend',
+            filtros: [
+              { coluna: 'platform', op: 'in', valor: [...porPlataforma.keys()] },
+              { coluna: 'date', op: 'gte', valor: inicio },
+              { coluna: 'date', op: 'lte', valor: fim },
+            ],
+            ordenarPor: 'date',
+          });
+          return linhas.flatMap((r) => {
+            const fonte = porPlataforma.get(r.platform);
+            return fonte ? [{ clientId: r.client_id, date: r.date, fonte, valor: Number(r.spend ?? 0) }] : [];
+          });
+        }
+      }
+    }),
+  );
+  return partes.flat();
 }
 
 /**
