@@ -184,9 +184,11 @@ Pontos a conferir:
 
 Arquivo: `src/data/local/seed.ts`.
 
-- As metas de `sementeMetas()` são a base da demonstração. Para a Argennti, o seed já traz a meta de out/2026 do inventário (2.414.531) e o orçamento (577.000). CPS, conversão e ticket são médias de jul–set/2026. Os pesos e os clientes de exemplo A e B são placeholders.
+- As metas de `sementeMetas()` são a base da demonstração. Para a Argennti, out/2026 traz as **metas oficiais do Adstart** (fonte: "Adstart — tela Metas, out/26", linha "Argennti Joias"; gravada em `updatedBy`): investimento/orçamento R$ 577.000; faturamento (meta fixa) R$ 2.414.530,16; CPS R$ 0,94; conversão 1,51%; ticket R$ 260,50. A calculadora reproduz os demais valores da tela: 613.829,79 sessões (Adstart 613.830), 9.268,83 pedidos (9.269), receita R$ 2.414.530,16 e ROAS 4,18. Os valores da tela ficam em `METAS_ADSTART_ARGENNTI_OUT26`.
+- Os pesos `d1`/`d2`/`d3` (reserva) e os clientes de exemplo A e B continuam placeholders. O piloto real é só a Argennti.
+- Na planilha do Adstart há também uma conta "Argennti" separada, sem metas. O seed usa a "Argennti Joias". **[?]** Confirmar qual conta corresponde ao `client_id` do piloto.
 - Para trocar: edite os valores mantendo a forma. A validação roda ao salvar (`validarDadosMeta`).
-- Se o localStorage já tiver dados, o seed só entra na primeira leitura. Para recarregar, limpe a chave `wolf-operacoes:metas:v1` do navegador.
+- Se o localStorage já tiver dados, o seed só entra na primeira leitura. Para recarregar (ex.: ver as metas oficiais num navegador que já abriu a demonstração), limpe a chave `wolf-operacoes:metas:v1` do navegador.
 
 ## 10. Próximos passos (F1)
 
