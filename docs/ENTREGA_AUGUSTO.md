@@ -20,7 +20,7 @@ Front (Vite + React + TS + Tailwind + shadcn + TanStack Query)
          depois: tabelas próprias no WOLFOS (seção 4), mesma interface
 ```
 
-- **Domínio puro** (`src/domain/`): calculadora, projeção por peso acumulado de decêndio, gap, meta diária necessária, índice GA4 × receita lançada, grade G0–G3, alertas. Sem I/O. Testado com vitest.
+- **Domínio puro** (`src/domain/`): calculadora, projeção por peso acumulado de decêndio com pesos históricos do ano anterior, gap, meta diária necessária, índice GA4 × receita lançada, grade G0–G3, alertas. Sem I/O. Testado com vitest.
 - **Telas** (`src/pages/`): só leem e apresentam. A conta mora no domínio.
 - **Nada é calculado e guardado.** Realizado, projeção, gap, % atingido, grade, alertas e decêndios são sempre calculados na hora, a partir da meta e dos lançamentos.
 
@@ -72,7 +72,7 @@ Meta do mês. É fixa depois de definida.
 | `client_id`, `ano`, `mes` | uuid, int, int | `unique (client_id, ano, mes)` |
 | `meta_receita` | numeric(14,2) | > 0 |
 | `premissas` | jsonb | `orcamento`, `cps`, `conversao` (fração), `ticket` |
-| `d1`, `d2`, `d3` | numeric(7,6) | pesos por decêndio, somam 1 |
+| `d1`, `d2`, `d3` | numeric(7,6) | pesos por decêndio de reserva (fallback sem histórico), somam 1 |
 | `motivo_alteracao` | text | obrigatório em qualquer alteração |
 | `updated_by` | text | a definir: texto ou uuid |
 | `created_at`, `updated_at` | timestamptz | |
@@ -82,6 +82,21 @@ Trava: trigger `before update` recusa mudança em meta, premissas ou pesos sem `
 ### 4.3 Calculados (não são tabela)
 
 Realizado do mês, % atingido, projeção de fechamento, gap, meta diária necessária, decêndios, índice GA4 × receita lançada, grade G0–G3, alertas. Tudo sai da meta, dos lançamentos e das leituras do WOLFOS.
+
+### 4.4 Pesos históricos (projeção, decêndios e meta diária)
+
+Mesma regra da planilha "Projeção de Meta" (Rei da Cutelaria), aba *PESOS POR DECÊNDIO — BASE HISTÓRICA*. Código em `src/domain/pesos.ts`.
+
+1. **Pesos do decêndio** = participação de D1 (dias 1–10), D2 (11–20) e D3 (21–fim) na receita GA4 do **mesmo mês do ano anterior** (`v_analytics_diario`, canais somados por dia).
+2. **Peso do dia** = peso do decêndio ÷ nº de dias do decêndio. Ex.: outubro com 37,5 / 28,7 / 33,8 → 3,75% por dia em D1 e 33,8% ÷ 11 em D3; o acumulado no dia 11 dá 40,4% e no dia 21 dá 69,3%, como na planilha.
+   - Escolha: o histórico é agregado por decêndio, não usado dia a dia, porque é o que a planilha faz e porque os dias da semana e o tamanho do mês mudam de um ano para o outro (fevereiro bissexto). O D3 vai sempre do dia 21 ao fim do mês corrente.
+3. **Projeção de fechamento** = realizado ÷ peso acumulado até o último dia fechado.
+4. **Meta por decêndio** = meta do mês × peso do decêndio.
+5. **Meta diária necessária** de cada dia restante = (meta − realizado) × peso do dia ÷ soma dos pesos dos dias restantes. O quadro mostra o valor do próximo dia e a média simples (falta ÷ dias restantes) como referência.
+6. **Aceleração** = (falta ÷ peso restante) ÷ (realizado ÷ peso acumulado). Acima de 1 = precisa acelerar.
+7. **Fallback:** sem histórico suficiente (receita total ≤ 0, menos de 80% dos dias do mês com dado, ou um decêndio sem dado), usa os pesos `d1`/`d2`/`d3` da `meta_mes`, divididos igualmente pelos dias de cada decêndio. A tela mostra a origem ("Histórico ano ant." ou "Pesos da meta").
+
+A meta do mês não muda: os pesos só distribuem a meta fixada.
 
 ## 5. O que você precisaria criar ou anexar
 
@@ -116,10 +131,12 @@ Os nomes vêm do inventário de 25/10/2026. Os pontos marcados com **[?]** preci
 | wolfos-dev | `pdas` | `client_id`, `due_date` | `status = 'pendente'`, `trashed = false` **[?]** |
 | wolfos-ads | `v_sync_saude` | `client_id`, `platform`, `dias_atrasado`, `last_sync_error`, `ultima_data_com_dado` | sem filtro |
 | wolfos-ads | `v_analytics_diario` | `client_id`, `date`, `revenue` | `date` no mês e até hoje |
+| wolfos-ads | `v_analytics_diario` | `client_id`, `date` **[?]** (tipo `date` ou texto AAAA-MM-DD), `revenue` **[?]** (receita total do GA4, não só e-commerce) | `date` do dia 1 ao último dia do **mesmo mês do ano anterior** (pesos históricos) |
 
 Pontos a conferir:
 - **Paginação:** a leitura pagina por intervalo ordenado por uma coluna que não é única (`name`, `client_id`, `date`). Em produção, usar chave única ou janela estável.
-- **`v_analytics_diario`** tem uma linha por canal × dia. O app soma os canais.
+- **`v_analytics_diario`** tem uma linha por canal × dia. O app soma os canais. **[?]** Confirmar que a soma dos canais não duplica receita (ex.: um canal "total" junto com os canais).
+- **Histórico da Argennti:** GA4 completo desde 01/2025, então o ano anterior existe a partir de jan/2026. **[?]** Confirmar cobertura dos outros clientes; sem ela, entra o fallback.
 - **`pdas`:** a contagem segue o inventário (pendentes fora da lixeira). A regra de "vencida" é `due_date` anterior a hoje.
 
 ## 8. Decisões em aberto
@@ -127,7 +144,7 @@ Pontos a conferir:
 1. **Variação contra o ano anterior** compara a receita lançada deste ano com a receita lançada do mesmo mês do ano anterior. Hoje isso exige lançar os meses de 2025. Alternativa: usar a receita do GA4 do ano anterior, mas a comparação fica inconsistente com a receita oficial.
 2. **Matriz da grade G0–G3** é uma proposta (`src/domain/grade-config.ts`). Faixas: A ≥ 0%; B de −5% a 0%; C de −15% a −5%; D abaixo de −15%. Eixos: atingimento da meta (projeção ÷ meta − 1) × variação contra o ano anterior.
 3. **Tolerância do tracking** é ±10% (`TOLERANCIA_TRACKING`). Pode virar configuração por cliente.
-4. **Pesos por decêndio** da Argennti são placeholder (33/34/33). Usar o histórico de receita do piloto.
+4. **Pesos por decêndio** vêm do GA4 do mesmo mês do ano anterior (seção 4.4). Os pesos `d1`/`d2`/`d3` da `meta_mes` viraram reserva (fallback). Em aberto: usar receita GA4 ou receita lançada do ano anterior, quando houver; média de mais de um ano; e pesos próprios para investimento, sessões e pedidos (a planilha tem os quatro, aqui só receita).
 5. **`lancado_por` e `updated_by`:** texto livre ou uuid de `auth.users`.
 6. **Realizado e projeção** usam a receita lançada. Se a receita oficial vier do Shopify ou de outra fonte, o lançamento continua sendo o ponto de entrada.
 
@@ -153,4 +170,4 @@ Arquivo: `src/data/local/seed.ts`.
 
 - Testes unitários: `npm test` (domínio, repositório local, camada de leitura e dados de exemplo).
 - Build: `npm run build` (checagem de tipos com `tsc -b` e build do Vite).
-- Esta entrega foi escrita sem executar o build nem os testes no ambiente de origem (o Node não estava instalado). **Rodar `npm install && npm test && npm run build` antes de revisar.**
+- Build e testes rodados em 25/10/2026: 12 arquivos, 106 testes passando; `npm run build` ok.

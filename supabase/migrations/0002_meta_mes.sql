@@ -15,7 +15,8 @@ create table public.meta_mes (
   meta_receita     numeric(14, 2) not null check (meta_receita > 0),
   -- Premissas da meta: { "orcamento": n, "cps": n, "conversao": fração, "ticket": n }
   premissas        jsonb not null,
-  -- Pesos por decêndio (frações que somam 1): D1 = dias 1–10, D2 = 11–20, D3 = 21 até o fim
+  -- Pesos por decêndio de RESERVA (frações que somam 1): D1 = dias 1–10, D2 = 11–20, D3 = 21 até o fim.
+  -- Usados só quando não há GA4 suficiente do mesmo mês do ano anterior (pesos históricos, calculados no app).
   d1               numeric(7, 6) not null check (d1 >= 0),
   d2               numeric(7, 6) not null check (d2 >= 0),
   d3               numeric(7, 6) not null check (d3 >= 0),

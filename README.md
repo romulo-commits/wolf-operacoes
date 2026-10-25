@@ -48,7 +48,8 @@ Use sempre a chave pública (anon/publishable) com RLS ativa. Nunca a service ro
 ```
 src/
   domain/          funções puras e testes: calculadora, projeção por decêndio,
-                   gap, meta diária, tracking GA4, grade G0–G3, alertas
+                   pesos históricos (ano anterior), gap, meta diária,
+                   tracking GA4, grade G0–G3, alertas
   data/
     wolfos/        LEITURA do WOLFOS (somente select) + dados de exemplo
     local/         metas e lançamentos (repositório local, seed editável)
