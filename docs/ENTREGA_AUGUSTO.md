@@ -13,14 +13,14 @@ Front (Vite + React + TS + Tailwind + shadcn + TanStack Query)
    │
    ├── Leitura do WOLFOS (somente select)
    │     wolfos-dev  → clients (ativos), pdas (pendentes, fora da lixeira)
-   │     wolfos-ads  → v_sync_saude, v_analytics_diario (GA4)
+   │     wolfos-ads  → v_sync_saude, v_analytics_diario (GA4), v_metrics_daily (investimento)
    │
    └── Metas e lançamentos (repositório local, src/data/local/)
          hoje: localStorage + seed editável
          depois: tabelas próprias no WOLFOS (seção 4), mesma interface
 ```
 
-- **Domínio puro** (`src/domain/`): calculadora, projeção por peso acumulado de decêndio com pesos históricos do ano anterior, gap, meta diária necessária, índice GA4 × receita lançada, grade G0–G3, alertas. Sem I/O. Testado com vitest.
+- **Domínio puro** (`src/domain/`): calculadora, projeção por peso acumulado de decêndio com pesos históricos do ano anterior (receita, investimento, sessões e pedidos, cada um com os seus), gap, ritmo necessário por dia (ponderado), índice GA4 × receita lançada, grade G0–G3, alertas. Sem I/O. Testado com vitest.
 - **Telas** (`src/pages/`): só leem e apresentam. A conta mora no domínio.
 - **Nada é calculado e guardado.** Realizado, projeção, gap, % atingido, grade, alertas e decêndios são sempre calculados na hora, a partir da meta e dos lançamentos.
 
@@ -81,9 +81,9 @@ Trava: trigger `before update` recusa mudança em meta, premissas ou pesos sem `
 
 ### 4.3 Calculados (não são tabela)
 
-Realizado do mês, % atingido, projeção de fechamento, gap, meta diária necessária, decêndios, índice GA4 × receita lançada, grade G0–G3, alertas. Tudo sai da meta, dos lançamentos e das leituras do WOLFOS.
+Realizado do mês, % atingido, projeção de fechamento, gap, ritmo necessário por dia (ponderado), decêndios, acompanhamento de investimento, sessões e pedidos, índice GA4 × receita lançada, grade G0–G3, alertas. Tudo sai da meta, dos lançamentos e das leituras do WOLFOS.
 
-### 4.4 Pesos históricos (projeção, decêndios e meta diária)
+### 4.4 Pesos históricos (projeção, decêndios e ritmo necessário por dia)
 
 Mesma regra da planilha "Projeção de Meta" (Rei da Cutelaria), aba *PESOS POR DECÊNDIO — BASE HISTÓRICA*. Código em `src/domain/pesos.ts`.
 
@@ -92,11 +92,24 @@ Mesma regra da planilha "Projeção de Meta" (Rei da Cutelaria), aba *PESOS POR 
    - Escolha: o histórico é agregado por decêndio, não usado dia a dia, porque é o que a planilha faz e porque os dias da semana e o tamanho do mês mudam de um ano para o outro (fevereiro bissexto). O D3 vai sempre do dia 21 ao fim do mês corrente.
 3. **Projeção de fechamento** = realizado ÷ peso acumulado até o último dia fechado.
 4. **Meta por decêndio** = meta do mês × peso do decêndio.
-5. **Meta diária necessária** de cada dia restante = (meta − realizado) × peso do dia ÷ soma dos pesos dos dias restantes. O quadro mostra o valor do próximo dia e a média simples (falta ÷ dias restantes) como referência.
+5. **Ritmo necessário por dia** (sempre o ponderado) de cada dia restante = (meta − realizado) × peso do dia ÷ soma dos pesos dos dias restantes. O quadro mostra o valor do próximo dia; a página do cliente mostra a lista de todos os dias restantes. Não há média simples (falta ÷ dias restantes) em nenhuma tela.
 6. **Aceleração** = (falta ÷ peso restante) ÷ (realizado ÷ peso acumulado). Acima de 1 = precisa acelerar.
-7. **Fallback:** sem histórico suficiente (receita total ≤ 0, menos de 80% dos dias do mês com dado, ou um decêndio sem dado), usa os pesos `d1`/`d2`/`d3` da `meta_mes`, divididos igualmente pelos dias de cada decêndio. A tela mostra a origem ("Histórico ano ant." ou "Pesos da meta").
+7. **Fallback:** sem histórico suficiente (total ≤ 0, menos de 80% dos dias do mês com dado, ou um decêndio sem dado), usa os pesos `d1`/`d2`/`d3` da `meta_mes`, divididos igualmente pelos dias de cada decêndio. A tela mostra a origem ("Histórico ano ant." ou "Pesos da meta").
 
 A meta do mês não muda: os pesos só distribuem a meta fixada.
+
+### 4.5 Investimento, sessões e pedidos (pesos próprios)
+
+Como na planilha, cada métrica tem os seus pesos por decêndio, com a mesma regra e o **fallback avaliado separadamente** (uma métrica pode usar o histórico e outra os pesos da meta). Código em `src/domain/metricas.ts`.
+
+| Métrica | Meta do mês (premissas da calculadora) | Realizado (até o último dia fechado) | Histórico dos pesos (mesmo mês do ano anterior) |
+|---|---|---|---|
+| Receita | `meta_mes.meta_receita` | receita aprovada lançada | `v_analytics_diario.revenue` |
+| Investimento | orçamento | `v_metrics_daily.spend`, Meta + Google | `v_metrics_daily.spend`, Meta + Google |
+| Sessões | orçamento ÷ CPS | `v_analytics_diario.sessions` | `v_analytics_diario.sessions` |
+| Pedidos | sessões × conversão | pedidos aprovados lançados (mesma fonte da receita) **[?]** | `v_analytics_diario.transactions` |
+
+Para cada uma: esperado até ontem = meta × peso acumulado; projeção = realizado ÷ peso acumulado; projeção ÷ meta; ritmo necessário por dia ponderado; metas por decêndio. A página do cliente mostra a tabela por métrica com o selo de pesos de cada uma, as metas por decêndio das quatro e o ritmo necessário de cada dia restante para as quatro. O quadro (aba Diário) mostra o investimento projetado ÷ orçamento com o selo de pesos do investimento.
 
 ## 5. O que você precisaria criar ou anexar
 
@@ -130,12 +143,16 @@ Os nomes vêm do inventário de 25/10/2026. Os pontos marcados com **[?]** preci
 | wolfos-dev | `clients` | `id`, `name` | `status = 'active'` |
 | wolfos-dev | `pdas` | `client_id`, `due_date` | `status = 'pendente'`, `trashed = false` **[?]** |
 | wolfos-ads | `v_sync_saude` | `client_id`, `platform`, `dias_atrasado`, `last_sync_error`, `ultima_data_com_dado` | sem filtro |
-| wolfos-ads | `v_analytics_diario` | `client_id`, `date`, `revenue` | `date` no mês e até hoje |
-| wolfos-ads | `v_analytics_diario` | `client_id`, `date` **[?]** (tipo `date` ou texto AAAA-MM-DD), `revenue` **[?]** (receita total do GA4, não só e-commerce) | `date` do dia 1 ao último dia do **mesmo mês do ano anterior** (pesos históricos) |
+| wolfos-ads | `v_analytics_diario` | `client_id`, `date`, `revenue`, `sessions`, `transactions` | `date` no mês e até hoje |
+| wolfos-ads | `v_analytics_diario` | `client_id`, `date` **[?]** (tipo `date` ou texto AAAA-MM-DD), `revenue` **[?]** (receita total do GA4, não só e-commerce), `sessions`, `transactions` **[?]** (transações = pedidos) | `date` do dia 1 ao último dia do **mesmo mês do ano anterior** (pesos históricos) |
+| wolfos-ads | `v_metrics_daily` | `client_id`, `date`, `spend` | `platform in ('meta','google')` **[?]**, `date` no mês e até hoje |
+| wolfos-ads | `v_metrics_daily` | `client_id`, `date`, `spend` | `platform in ('meta','google')` **[?]**, `date` do dia 1 ao último dia do **mesmo mês do ano anterior** (pesos do investimento) |
 
 Pontos a conferir:
 - **Paginação:** a leitura pagina por intervalo ordenado por uma coluna que não é única (`name`, `client_id`, `date`). Em produção, usar chave única ou janela estável.
 - **`v_analytics_diario`** tem uma linha por canal × dia. O app soma os canais. **[?]** Confirmar que a soma dos canais não duplica receita (ex.: um canal "total" junto com os canais).
+- **`v_metrics_daily`:** o app soma as linhas por cliente × dia. **[?]** Confirmar que a view tem uma linha por cliente × plataforma × dia (sem níveis campanha/conjunto/anúncio somados juntos, o que duplicaria o investimento) e que os valores de `platform` são `meta` e `google` (como em `platform_accounts`). `ad_metrics_daily` não foi usada: não tem `client_id` e tem a coluna `level`. **[?]** Confirmar se outras plataformas de mídia devem entrar no investimento.
+- **`sessions` e `transactions`:** nulo = sem dado (não conta como zero). **[?]** Confirmar os nomes e se `transactions` é o número de pedidos do GA4.
 - **Histórico da Argennti:** GA4 completo desde 01/2025, então o ano anterior existe a partir de jan/2026. **[?]** Confirmar cobertura dos outros clientes; sem ela, entra o fallback.
 - **`pdas`:** a contagem segue o inventário (pendentes fora da lixeira). A regra de "vencida" é `due_date` anterior a hoje.
 
@@ -144,9 +161,10 @@ Pontos a conferir:
 1. **Variação contra o ano anterior** compara a receita lançada deste ano com a receita lançada do mesmo mês do ano anterior. Hoje isso exige lançar os meses de 2025. Alternativa: usar a receita do GA4 do ano anterior, mas a comparação fica inconsistente com a receita oficial.
 2. **Matriz da grade G0–G3** é uma proposta (`src/domain/grade-config.ts`). Faixas: A ≥ 0%; B de −5% a 0%; C de −15% a −5%; D abaixo de −15%. Eixos: atingimento da meta (projeção ÷ meta − 1) × variação contra o ano anterior.
 3. **Tolerância do tracking** é ±10% (`TOLERANCIA_TRACKING`). Pode virar configuração por cliente.
-4. **Pesos por decêndio** vêm do GA4 do mesmo mês do ano anterior (seção 4.4). Os pesos `d1`/`d2`/`d3` da `meta_mes` viraram reserva (fallback). Em aberto: usar receita GA4 ou receita lançada do ano anterior, quando houver; média de mais de um ano; e pesos próprios para investimento, sessões e pedidos (a planilha tem os quatro, aqui só receita).
+4. **Pesos por decêndio** vêm do mesmo mês do ano anterior, um conjunto por métrica (seções 4.4 e 4.5): receita GA4 (decidido), investimento de Meta + Google, sessões e transações do GA4. Os pesos `d1`/`d2`/`d3` da `meta_mes` são a reserva (fallback) de cada métrica. Em aberto: média de mais de um ano.
 5. **`lancado_por` e `updated_by`:** texto livre ou uuid de `auth.users`.
 6. **Realizado e projeção** usam a receita lançada. Se a receita oficial vier do Shopify ou de outra fonte, o lançamento continua sendo o ponto de entrada.
+7. **Pedidos realizados** vêm dos pedidos aprovados lançados, como a receita. Alternativa: transações do GA4 (as mesmas usadas nos pesos), que existem dia a dia mas não são a fonte oficial.
 
 ## 9. Como trocar o seed (metas de exemplo)
 
@@ -170,4 +188,4 @@ Arquivo: `src/data/local/seed.ts`.
 
 - Testes unitários: `npm test` (domínio, repositório local, camada de leitura e dados de exemplo).
 - Build: `npm run build` (checagem de tipos com `tsc -b` e build do Vite).
-- Build e testes rodados em 25/10/2026: 12 arquivos, 106 testes passando; `npm run build` ok.
+- Build e testes rodados em 25/10/2026: 13 arquivos, 121 testes passando; `npm run build` ok.

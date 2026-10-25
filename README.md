@@ -7,7 +7,7 @@
 ## O que tem aqui
 
 - **Quadro da carteira**: visões diária, decêndio e mensal/anual; PDAs pendentes e vencidas; alertas.
-- **Página do cliente**: metas por decêndio, premissas e funil, confiabilidade do GA4, sync e lançamentos do mês.
+- **Página do cliente**: acompanhamento de receita, investimento, sessões e pedidos (meta, realizado, esperado, projeção e ritmo necessário por dia, cada um com os seus pesos históricos), metas por decêndio, premissas e funil, confiabilidade do GA4, sync e lançamentos do mês.
 - **Meta do mês e calculadora**: meta fixa depois de definida (alteração só com motivo) e simulador (sessões, pedidos, receita, ROAS, CPA).
 - **Lançamento de receita**: receita aprovada oficial, lançada pelo analista (Adstart ou plataforma).
 - **Conexões**: saúde do sync por cliente e plataforma (leitura da `v_sync_saude`).
@@ -16,6 +16,8 @@ Regras de negócio:
 
 - **Receita oficial** = receita aprovada lançada. O GA4 é comparado a ela (índice de confiabilidade do tracking), nunca o contrário.
 - **Meta do mês** é fixa. Qualquer alteração exige motivo, autor e data.
+- **Pesos por decêndio** vêm do mesmo mês do ano anterior, um conjunto para cada métrica (receita e sessões/pedidos do GA4, investimento de Meta + Google). Sem histórico suficiente, cada métrica cai nos pesos `d1`/`d2`/`d3` da meta.
+- **Ritmo necessário por dia** é sempre o ponderado: falta × peso do dia ÷ peso dos dias restantes. Não há média simples.
 - **Grade G0–G3** cruza o atingimento da meta (projeção ÷ meta) com a variação contra o ano anterior. Matriz em `src/domain/grade-config.ts` (proposta a validar).
 - **Bancos do WOLFOS são somente leitura.** O código só faz `select`. Um teste garante que não há `insert`, `update`, `upsert`, `delete` nem `rpc` na camada de leitura.
 
@@ -48,7 +50,8 @@ Use sempre a chave pública (anon/publishable) com RLS ativa. Nunca a service ro
 ```
 src/
   domain/          funções puras e testes: calculadora, projeção por decêndio,
-                   pesos históricos (ano anterior), gap, meta diária,
+                   pesos históricos (ano anterior) por métrica, gap,
+                   ritmo necessário por dia (ponderado),
                    tracking GA4, grade G0–G3, alertas
   data/
     wolfos/        LEITURA do WOLFOS (somente select) + dados de exemplo
