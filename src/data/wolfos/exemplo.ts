@@ -1,4 +1,4 @@
-import type { PdaCarteira, ReceitaGa4Dia, ClienteCarteira } from '@/domain/carteira';
+import type { ClienteCarteira, InvestimentoDia, PdaCarteira, ReceitaGa4Dia } from '@/domain/carteira';
 import { prefixoMes } from '@/domain/carteira';
 import { diasNoMes } from '@/domain/calendario';
 import { CLIENTE_ARGENNTI_ID, CLIENTE_EXEMPLO_A_ID, CLIENTE_EXEMPLO_B_ID } from '@/data/piloto';
@@ -13,30 +13,62 @@ import type { DadosWolfos, SyncPlataforma } from './carteira';
 /** Dias com dado no mês de exemplo (1 a 24 de outubro). */
 const DIAS_COM_DADO = 24;
 
-function distribuirPorDia(clientId: string, total: number, prefixo: string): ReceitaGa4Dia[] {
-  const porDia = total / DIAS_COM_DADO;
+const dia2 = (dia: number) => String(dia).padStart(2, '0');
+
+/** GA4 do mês de exemplo: totais de receita, sessões e pedidos divididos igualmente pelos 24 dias. */
+function distribuirPorDia(
+  clientId: string,
+  prefixo: string,
+  totais: { receita: number; sessoes: number; pedidos: number },
+): ReceitaGa4Dia[] {
   return Array.from({ length: DIAS_COM_DADO }, (_, i) => ({
     clientId,
-    date: `${prefixo}-${String(i + 1).padStart(2, '0')}`,
-    receita: porDia,
+    date: `${prefixo}-${dia2(i + 1)}`,
+    receita: totais.receita / DIAS_COM_DADO,
+    sessoes: totais.sessoes / DIAS_COM_DADO,
+    pedidos: totais.pedidos / DIAS_COM_DADO,
   }));
 }
 
+function investimentoPorDia(clientId: string, prefixo: string, total: number): InvestimentoDia[] {
+  return Array.from({ length: DIAS_COM_DADO }, (_, i) => ({
+    clientId,
+    date: `${prefixo}-${dia2(i + 1)}`,
+    valor: total / DIAS_COM_DADO,
+  }));
+}
+
+type PorDecendio = [number, number, number];
+const indiceDecendio = (dia: number) => (dia <= 10 ? 0 : dia <= 20 ? 1 : 2);
+
 /**
- * GA4 diário de exemplo para o mesmo mês do ano anterior. `porDecendio` = receita por dia
- * em D1, D2 e D3 (ilustrativo). Gera os pesos históricos do exemplo.
+ * GA4 diário de exemplo para o mesmo mês do ano anterior: valor por dia em D1, D2 e D3
+ * (ilustrativo) para receita, sessões e pedidos. Gera os pesos históricos do exemplo.
  */
-function historicoPorDecendio(
+function historicoGa4(
   clientId: string,
   prefixo: string,
   totalDias: number,
-  porDecendio: [number, number, number],
+  porDecendio: { receita: PorDecendio; sessoes: PorDecendio; pedidos: PorDecendio },
 ): ReceitaGa4Dia[] {
   return Array.from({ length: totalDias }, (_, i) => {
-    const dia = i + 1;
-    const indice = dia <= 10 ? 0 : dia <= 20 ? 1 : 2;
-    return { clientId, date: `${prefixo}-${String(dia).padStart(2, '0')}`, receita: porDecendio[indice] };
+    const d = indiceDecendio(i + 1);
+    return {
+      clientId,
+      date: `${prefixo}-${dia2(i + 1)}`,
+      receita: porDecendio.receita[d],
+      sessoes: porDecendio.sessoes[d],
+      pedidos: porDecendio.pedidos[d],
+    };
   });
+}
+
+function historicoInvestimento(clientId: string, prefixo: string, totalDias: number, porDecendio: PorDecendio): InvestimentoDia[] {
+  return Array.from({ length: totalDias }, (_, i) => ({
+    clientId,
+    date: `${prefixo}-${dia2(i + 1)}`,
+    valor: porDecendio[indiceDecendio(i + 1)],
+  }));
 }
 
 export function dadosExemplo(ano: number, mes: number): DadosWolfos {
@@ -76,21 +108,47 @@ export function dadosExemplo(ano: number, mes: number): DadosWolfos {
 
   const receitaGa4: ReceitaGa4Dia[] = [
     // Argennti: GA4 ~1% acima da receita lançada (dentro da tolerância)
-    ...distribuirPorDia(CLIENTE_ARGENNTI_ID, 1_720_000, prefixo),
+    ...distribuirPorDia(CLIENTE_ARGENNTI_ID, prefixo, { receita: 1_720_000, sessoes: 470_000, pedidos: 6_500 }),
     // Exemplo A: bate com a receita lançada
-    ...distribuirPorDia(CLIENTE_EXEMPLO_A_ID, 1_071_000, prefixo),
+    ...distribuirPorDia(CLIENTE_EXEMPLO_A_ID, prefixo, { receita: 1_071_000, sessoes: 210_000, pedidos: 2_400 }),
     // Exemplo B: GA4 40% acima da receita lançada (divergente)
-    ...distribuirPorDia(CLIENTE_EXEMPLO_B_ID, 700_000, prefixo),
+    ...distribuirPorDia(CLIENTE_EXEMPLO_B_ID, prefixo, { receita: 700_000, sessoes: 150_000, pedidos: 1_400 }),
   ];
 
-  // Ano anterior: Argennti e Exemplo A têm histórico (pesos históricos);
-  // Exemplo B não tem, para mostrar o fallback com os pesos da meta.
+  const investimento: InvestimentoDia[] = [
+    ...investimentoPorDia(CLIENTE_ARGENNTI_ID, prefixo, 430_000),
+    ...investimentoPorDia(CLIENTE_EXEMPLO_A_ID, prefixo, 150_000),
+    ...investimentoPorDia(CLIENTE_EXEMPLO_B_ID, prefixo, 90_000),
+  ];
+
+  // Ano anterior: Argennti tem histórico de tudo; Exemplo A só de GA4 (investimento cai no
+  // fallback); Exemplo B não tem nada, para mostrar o fallback com os pesos da meta.
   const prefixoAnterior = prefixoMes(ano - 1, mes);
   const diasAnterior = diasNoMes(ano - 1, mes);
-  const receitaGa4AnoAnterior: ReceitaGa4Dia[] = [
-    ...historicoPorDecendio(CLIENTE_ARGENNTI_ID, prefixoAnterior, diasAnterior, [70_000, 50_000, 60_000]),
-    ...historicoPorDecendio(CLIENTE_EXEMPLO_A_ID, prefixoAnterior, diasAnterior, [30_000, 32_000, 40_000]),
+  const ga4AnoAnterior: ReceitaGa4Dia[] = [
+    ...historicoGa4(CLIENTE_ARGENNTI_ID, prefixoAnterior, diasAnterior, {
+      receita: [70_000, 50_000, 60_000],
+      sessoes: [16_000, 14_000, 15_000],
+      pedidos: [260, 190, 230],
+    }),
+    ...historicoGa4(CLIENTE_EXEMPLO_A_ID, prefixoAnterior, diasAnterior, {
+      receita: [30_000, 32_000, 40_000],
+      sessoes: [6_000, 6_500, 7_500],
+      pedidos: [70, 75, 90],
+    }),
+  ];
+  const investimentoAnoAnterior: InvestimentoDia[] = [
+    ...historicoInvestimento(CLIENTE_ARGENNTI_ID, prefixoAnterior, diasAnterior, [14_000, 15_000, 16_000]),
   ];
 
-  return { fonte: 'exemplo', clientes, syncPlataformas, pdas, receitaGa4, receitaGa4AnoAnterior };
+  return {
+    fonte: 'exemplo',
+    clientes,
+    syncPlataformas,
+    pdas,
+    receitaGa4,
+    ga4AnoAnterior,
+    investimento,
+    investimentoAnoAnterior,
+  };
 }

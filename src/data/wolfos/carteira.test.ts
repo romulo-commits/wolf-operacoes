@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { consolidarSync, type SyncPlataforma } from './carteira';
+import { consolidarSync, lerDoWolfos, type SyncPlataforma } from './carteira';
+import type { LeituraWolfos, OpcoesLeitura } from './leitura';
 import { lerConfigWolfos } from './conexao';
 import { dadosExemplo } from './exemplo';
 import { CLIENTE_ARGENNTI_ID, CLIENTE_EXEMPLO_B_ID } from '@/data/piloto';
@@ -69,12 +70,59 @@ describe('dadosExemplo · ano anterior', () => {
   const dados = dadosExemplo(2026, 10);
 
   it('traz GA4 diário do mesmo mês do ano anterior para os pesos históricos', () => {
-    const argennti = dados.receitaGa4AnoAnterior.filter((r) => r.clientId === CLIENTE_ARGENNTI_ID);
+    const argennti = dados.ga4AnoAnterior.filter((r) => r.clientId === CLIENTE_ARGENNTI_ID);
     expect(argennti).toHaveLength(31);
     expect(argennti.every((r) => r.date.startsWith('2025-10-'))).toBe(true);
+    expect(argennti.every((r) => r.sessoes !== undefined && r.pedidos !== undefined)).toBe(true);
+  });
+
+  it('traz investimento do ano anterior só da Argennti (Exemplo A mostra o fallback de investimento)', () => {
+    const clientes = new Set(dados.investimentoAnoAnterior.map((r) => r.clientId));
+    expect([...clientes]).toEqual([CLIENTE_ARGENNTI_ID]);
+    expect(dados.investimento.filter((r) => r.clientId === CLIENTE_ARGENNTI_ID)).toHaveLength(24);
   });
 
   it('o Exemplo B fica sem histórico para mostrar o fallback', () => {
-    expect(dados.receitaGa4AnoAnterior.some((r) => r.clientId === CLIENTE_EXEMPLO_B_ID)).toBe(false);
+    expect(dados.ga4AnoAnterior.some((r) => r.clientId === CLIENTE_EXEMPLO_B_ID)).toBe(false);
+  });
+});
+
+describe('lerDoWolfos · leituras de mídia e GA4 (somente select, leitor falso)', () => {
+  const chamadas: Array<{ banco: string; tabela: string; opcoes: OpcoesLeitura }> = [];
+  const respostas: Record<string, unknown[]> = {
+    'v_analytics_diario:2026-10-01': [
+      { client_id: 'c1', date: '2026-10-01', revenue: '100', sessions: '50', transactions: '2' },
+      { client_id: 'c1', date: '2026-10-02', revenue: 10, sessions: null, transactions: null },
+    ],
+    'v_metrics_daily:2025-10-01': [{ client_id: 'c1', date: '2025-10-03', spend: '12.5' }],
+  };
+  const leitor = (banco: string): LeituraWolfos => ({
+    async selecionarTodos<T>(tabela: string, opcoes: OpcoesLeitura): Promise<T[]> {
+      chamadas.push({ banco, tabela, opcoes });
+      const inicio = opcoes.filtros?.find((f) => f.coluna === 'date' && f.op === 'gte')?.valor;
+      return (respostas[`${tabela}:${String(inicio)}`] ?? []) as T[];
+    },
+  });
+
+  it('lê sessões e transações do GA4 e o spend de Meta + Google do mês e do ano anterior', async () => {
+    const dados = await lerDoWolfos({ ads: leitor('ads'), dev: leitor('dev') }, 2026, 10, new Date(2026, 9, 25));
+    const ga4 = chamadas.filter((c) => c.tabela === 'v_analytics_diario');
+    expect(ga4.map((c) => c.opcoes.colunas)).toEqual([
+      'client_id,date,revenue,sessions,transactions',
+      'client_id,date,revenue,sessions,transactions',
+    ]);
+    const midia = chamadas.filter((c) => c.tabela === 'v_metrics_daily');
+    expect(midia).toHaveLength(2);
+    expect(midia.every((c) => c.banco === 'ads' && c.opcoes.colunas === 'client_id,date,spend')).toBe(true);
+    expect(midia[0].opcoes.filtros).toContainEqual({ coluna: 'platform', op: 'in', valor: ['meta', 'google'] });
+    expect(midia.map((c) => c.opcoes.filtros?.filter((f) => f.coluna === 'date').map((f) => f.valor))).toEqual([
+      ['2026-10-01', '2026-10-25'],
+      ['2025-10-01', '2025-10-31'],
+    ]);
+
+    expect(dados.receitaGa4[0]).toEqual({ clientId: 'c1', date: '2026-10-01', receita: 100, sessoes: 50, pedidos: 2 });
+    expect(dados.receitaGa4[1].sessoes).toBeUndefined(); // nulo = sem dado
+    expect(dados.investimentoAnoAnterior).toEqual([{ clientId: 'c1', date: '2025-10-03', valor: 12.5 }]);
+    expect(dados.investimento).toEqual([]);
   });
 });

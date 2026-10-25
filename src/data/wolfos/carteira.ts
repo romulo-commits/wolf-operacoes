@@ -1,4 +1,4 @@
-import type { ClienteCarteira, PdaCarteira, ReceitaGa4Dia, SyncCarteira } from '@/domain/carteira';
+import type { ClienteCarteira, InvestimentoDia, PdaCarteira, ReceitaGa4Dia, SyncCarteira } from '@/domain/carteira';
 import { dataIso, prefixoMes } from '@/domain/carteira';
 import { diasNoMes } from '@/domain/calendario';
 import { obterLeiturasWolfos, type LeiturasWolfos } from './conexao';
@@ -20,10 +20,18 @@ export interface DadosWolfos {
   clientes: ClienteCarteira[];
   syncPlataformas: SyncPlataforma[];
   pdas: PdaCarteira[];
+  /** GA4 diário do mês: receita, sessões e pedidos (transações). */
   receitaGa4: ReceitaGa4Dia[];
-  /** GA4 diário do mesmo mês do ano anterior: base dos pesos históricos por decêndio. */
-  receitaGa4AnoAnterior: ReceitaGa4Dia[];
+  /** GA4 diário do mesmo mês do ano anterior: pesos históricos de receita, sessões e pedidos. */
+  ga4AnoAnterior: ReceitaGa4Dia[];
+  /** Investimento diário do mês (Meta + Google). */
+  investimento: InvestimentoDia[];
+  /** Investimento diário do mesmo mês do ano anterior: pesos históricos de investimento. */
+  investimentoAnoAnterior: InvestimentoDia[];
 }
+
+/** Plataformas de mídia somadas no investimento. */
+export const PLATAFORMAS_MIDIA = ['meta', 'google'];
 
 interface LinhaCliente {
   id: string;
@@ -47,6 +55,14 @@ interface LinhaGa4 {
   client_id: string;
   date: string;
   revenue: number | string | null;
+  sessions: number | string | null;
+  transactions: number | string | null;
+}
+
+interface LinhaMidia {
+  client_id: string;
+  date: string;
+  spend: number | string | null;
 }
 
 /**
@@ -59,7 +75,7 @@ export async function carregarDadosWolfos(ano: number, mes: number, hoje: Date):
   return lerDoWolfos(leituras, ano, mes, hoje);
 }
 
-async function lerDoWolfos(
+export async function lerDoWolfos(
   leituras: LeiturasWolfos,
   ano: number,
   mes: number,
@@ -69,7 +85,7 @@ async function lerDoWolfos(
   const prefixoAnoAnterior = prefixoMes(ano - 1, mes);
   const ultimoDiaAnoAnterior = String(diasNoMes(ano - 1, mes)).padStart(2, '0');
 
-  const [clientes, sync, pdas, ga4, ga4AnoAnterior] = await Promise.all([
+  const [clientes, sync, pdas, ga4, ga4AnoAnterior, midia, midiaAnoAnterior] = await Promise.all([
     leituras.dev.selecionarTodos<LinhaCliente>('clients', {
       colunas: 'id,name',
       filtros: [{ coluna: 'status', op: 'eq', valor: 'active' }],
@@ -88,7 +104,7 @@ async function lerDoWolfos(
       ordenarPor: 'client_id',
     }),
     leituras.ads.selecionarTodos<LinhaGa4>('v_analytics_diario', {
-      colunas: 'client_id,date,revenue',
+      colunas: 'client_id,date,revenue,sessions,transactions',
       filtros: [
         { coluna: 'date', op: 'gte', valor: `${prefixo}-01` },
         { coluna: 'date', op: 'lte', valor: dataIso(hoje) },
@@ -97,8 +113,27 @@ async function lerDoWolfos(
     }),
     // Mesmo mês do ano anterior, só para os pesos históricos (somente leitura).
     leituras.ads.selecionarTodos<LinhaGa4>('v_analytics_diario', {
-      colunas: 'client_id,date,revenue',
+      colunas: 'client_id,date,revenue,sessions,transactions',
       filtros: [
+        { coluna: 'date', op: 'gte', valor: `${prefixoAnoAnterior}-01` },
+        { coluna: 'date', op: 'lte', valor: `${prefixoAnoAnterior}-${ultimoDiaAnoAnterior}` },
+      ],
+      ordenarPor: 'date',
+    }),
+    // Investimento do mês e do mesmo mês do ano anterior (somente leitura).
+    leituras.ads.selecionarTodos<LinhaMidia>('v_metrics_daily', {
+      colunas: 'client_id,date,spend',
+      filtros: [
+        { coluna: 'platform', op: 'in', valor: PLATAFORMAS_MIDIA },
+        { coluna: 'date', op: 'gte', valor: `${prefixo}-01` },
+        { coluna: 'date', op: 'lte', valor: dataIso(hoje) },
+      ],
+      ordenarPor: 'date',
+    }),
+    leituras.ads.selecionarTodos<LinhaMidia>('v_metrics_daily', {
+      colunas: 'client_id,date,spend',
+      filtros: [
+        { coluna: 'platform', op: 'in', valor: PLATAFORMAS_MIDIA },
         { coluna: 'date', op: 'gte', valor: `${prefixoAnoAnterior}-01` },
         { coluna: 'date', op: 'lte', valor: `${prefixoAnoAnterior}-${ultimoDiaAnoAnterior}` },
       ],
@@ -110,6 +145,13 @@ async function lerDoWolfos(
     clientId: r.client_id,
     date: r.date,
     receita: Number(r.revenue ?? 0),
+    sessoes: r.sessions === null ? undefined : Number(r.sessions),
+    pedidos: r.transactions === null ? undefined : Number(r.transactions),
+  });
+  const paraInvestimento = (r: LinhaMidia): InvestimentoDia => ({
+    clientId: r.client_id,
+    date: r.date,
+    valor: Number(r.spend ?? 0),
   });
 
   return {
@@ -124,7 +166,9 @@ async function lerDoWolfos(
     })),
     pdas: pdas.map((p) => ({ clientId: p.client_id, dueDate: p.due_date })),
     receitaGa4: ga4.map(paraReceita),
-    receitaGa4AnoAnterior: ga4AnoAnterior.map(paraReceita),
+    ga4AnoAnterior: ga4AnoAnterior.map(paraReceita),
+    investimento: midia.map(paraInvestimento),
+    investimentoAnoAnterior: midiaAnoAnterior.map(paraInvestimento),
   };
 }
 
