@@ -59,17 +59,32 @@ export function BadgesAlertas({ alertas }: { alertas: Alerta[] }) {
 }
 
 /** De onde vieram os pesos: histórico do ano anterior ou fallback da meta. */
-export function BadgePesos({ pesos }: { pesos: PesosAplicados | null }) {
+export function BadgePesos({
+  pesos,
+  fonte = 'GA4',
+  metrica,
+}: {
+  pesos: PesosAplicados | null;
+  /** De onde vem o histórico da métrica (aparece no detalhe). */
+  fonte?: string;
+  /** Nome da métrica, quando a mesma tela mostra pesos de várias. */
+  metrica?: string;
+}) {
   if (!pesos) return traco;
   const { d1, d2, d3 } = pesos.pesos;
   const detalhe = `D1 ${percentualFracao(d1)} · D2 ${percentualFracao(d2)} · D3 ${percentualFracao(d3)}`;
+  const prefixo = metrica ? `${metrica}: ` : '';
   return pesos.origem === 'historico' ? (
-    <Badge variant="outline" title={`Mesmo mês do ano anterior (GA4). ${detalhe}`}>
-      Histórico ano ant.
+    <Badge variant="outline" title={`${prefixo}mesmo mês do ano anterior (${fonte}). ${detalhe}`}>
+      {prefixo}Histórico ano ant.
     </Badge>
   ) : (
-    <Badge variant="outline" className="border-atencao/40 text-atencao" title={`Sem histórico suficiente: pesos da meta. ${detalhe}`}>
-      Pesos da meta
+    <Badge
+      variant="outline"
+      className="border-atencao/40 text-atencao"
+      title={`${prefixo}sem histórico suficiente: pesos da meta. ${detalhe}`}
+    >
+      {prefixo}Pesos da meta
     </Badge>
   );
 }

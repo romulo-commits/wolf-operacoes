@@ -6,9 +6,47 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { simularMeta } from '@/domain/calculadora';
 import { dataIso, prefixoMes } from '@/domain/carteira';
+import { METRICAS_FUNIL, ROTULO_METRICA, type AcompanhamentoMetrica, type Metrica } from '@/domain/metricas';
+import type { PesosAplicados } from '@/domain/pesos';
 import { mesPorExtenso, moeda, parseMesInput, percentualFracao, inteiro, decimal, dataBr, mesParaInput } from '@/lib/formatar';
 import { useCarteira, useLancamentos, useMetas } from '@/hooks/consultas';
 import { NaoEncontrada } from './NaoEncontrada';
+
+const FONTE_PESOS: Record<Metrica, string> = {
+  receita: 'GA4, receita',
+  investimento: 'v_metrics_daily, Meta + Google',
+  sessoes: 'GA4, sessões',
+  pedidos: 'GA4, transações',
+};
+
+/** Formata o valor da métrica: dinheiro para receita e investimento, inteiro para sessões e pedidos. */
+function valorMetrica(metrica: Metrica, valor: number | null): string {
+  return metrica === 'receita' || metrica === 'investimento' ? moeda(valor) : inteiro(valor);
+}
+
+interface LinhaMetrica {
+  metrica: Metrica;
+  meta: number | null;
+  realizado: number | null;
+  esperado: number | null;
+  projecao: number | null;
+  percentualProjetado: number | null;
+  necessaria: number | null;
+  pesos: PesosAplicados | null;
+}
+
+function deAcompanhamento(a: AcompanhamentoMetrica): LinhaMetrica {
+  return {
+    metrica: a.metrica,
+    meta: a.meta,
+    realizado: a.realizado,
+    esperado: a.esperadoAteAgora,
+    projecao: a.projecao,
+    percentualProjetado: a.percentualProjetado,
+    necessaria: a.diaria?.necessaria ?? null,
+    pesos: a.pesos,
+  };
+}
 
 export function PaginaCliente() {
   const { clientId = '' } = useParams();
@@ -46,6 +84,26 @@ export function PaginaCliente() {
         }
       })()
     : null;
+
+  const funil = linha.funil;
+  const linhasMetricas: LinhaMetrica[] = [
+    {
+      metrica: 'receita',
+      meta: r.metaReceita,
+      realizado: r.realizado,
+      esperado:
+        r.metaReceita !== null && r.metaReceita > 0 && r.pesoAcumulado !== null ? r.metaReceita * r.pesoAcumulado : null,
+      projecao: r.projecao,
+      percentualProjetado: r.percentualProjetado,
+      necessaria: r.diaria?.necessaria ?? null,
+      pesos: r.pesos,
+    },
+    ...(funil ? METRICAS_FUNIL.map((m) => deAcompanhamento(funil[m])) : []),
+  ];
+  // Cronograma por dia: o mesmo dia restante em todas as métricas, cada uma com o seu peso.
+  const cronogramaFunil = funil
+    ? METRICAS_FUNIL.map((m) => new Map((funil[m].diaria?.cronograma ?? []).map((d) => [d.dia, d] as const)))
+    : [];
 
   return (
     <div className="space-y-6">
@@ -86,6 +144,60 @@ export function PaginaCliente() {
         <BadgePesos pesos={r.pesos} />
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Acompanhamento por métrica</CardTitle>
+          <CardDescription>
+            Cada métrica com os seus pesos por decêndio do mesmo mês do ano anterior (fallback: d1/d2/d3 da meta).
+            Metas de investimento, sessões e pedidos vêm das premissas (orçamento, orçamento ÷ CPS, sessões × conversão).
+            Ritmo necessário/dia = ponderado: falta × peso do próximo dia ÷ peso dos dias restantes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Métrica</TableHead>
+                <TableHead className="text-right">Meta do mês</TableHead>
+                <TableHead className="text-right">Realizado</TableHead>
+                <TableHead className="text-right" title="Meta × peso acumulado dos dias fechados">
+                  Esperado até ontem
+                </TableHead>
+                <TableHead className="text-right" title="Realizado ÷ peso acumulado">
+                  Projeção
+                </TableHead>
+                <TableHead className="text-right">Projeção ÷ meta</TableHead>
+                <TableHead className="text-right">Ritmo necessário/dia</TableHead>
+                <TableHead>Pesos</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {linhasMetricas.map((m) => (
+                <TableRow key={m.metrica}>
+                  <TableCell className="font-medium">{ROTULO_METRICA[m.metrica]}</TableCell>
+                  <TableCell className="text-right">{valorMetrica(m.metrica, m.meta)}</TableCell>
+                  <TableCell className="text-right">{valorMetrica(m.metrica, m.realizado)}</TableCell>
+                  <TableCell className="text-right">{valorMetrica(m.metrica, m.esperado)}</TableCell>
+                  <TableCell className="text-right">{valorMetrica(m.metrica, m.projecao)}</TableCell>
+                  <TableCell className="text-right">{percentualFracao(m.percentualProjetado)}</TableCell>
+                  <TableCell className="text-right">{valorMetrica(m.metrica, m.necessaria)}</TableCell>
+                  <TableCell>
+                    <BadgePesos pesos={m.pesos} fonte={FONTE_PESOS[m.metrica]} />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!funil && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-muted-foreground">
+                    Sem meta do mês: investimento, sessões e pedidos dependem das premissas da meta.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -93,7 +205,8 @@ export function PaginaCliente() {
             <CardDescription>
               {r.pesos?.origem === 'meta'
                 ? 'Sem histórico suficiente do mesmo mês no ano anterior: usando os pesos d1/d2/d3 da meta.'
-                : 'Meta do mês distribuída pelos pesos históricos (mesmo mês do ano anterior, GA4).'}
+                : 'Meta do mês distribuída pelos pesos históricos (mesmo mês do ano anterior, GA4).'}{' '}
+              Investimento, sessões e pedidos usam os pesos de cada um (passe o mouse para ver o peso).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -102,25 +215,41 @@ export function PaginaCliente() {
                 <TableRow>
                   <TableHead>Decêndio</TableHead>
                   <TableHead className="text-right">Peso</TableHead>
-                  <TableHead className="text-right">Meta</TableHead>
+                  <TableHead className="text-right">Receita</TableHead>
+                  {funil &&
+                    METRICAS_FUNIL.map((m) => (
+                      <TableHead key={m} className="text-right">
+                        {ROTULO_METRICA[m]}
+                      </TableHead>
+                    ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {meta && r.pesos ? (
                   ([
-                    ['D1 (dias 1–10)', r.pesos.pesos.d1, r.metasDecendio?.[1] ?? null],
-                    ['D2 (dias 11–20)', r.pesos.pesos.d2, r.metasDecendio?.[2] ?? null],
-                    ['D3 (dias 21–fim)', r.pesos.pesos.d3, r.metasDecendio?.[3] ?? null],
-                  ] as const).map(([rotulo, peso, valor]) => (
+                    ['D1 (dias 1–10)', 'd1', r.metasDecendio?.[1] ?? null],
+                    ['D2 (dias 11–20)', 'd2', r.metasDecendio?.[2] ?? null],
+                    ['D3 (dias 21–fim)', 'd3', r.metasDecendio?.[3] ?? null],
+                  ] as const).map(([rotulo, chave, valor]) => (
                     <TableRow key={rotulo}>
                       <TableCell>{rotulo}</TableCell>
-                      <TableCell className="text-right">{percentualFracao(peso)}</TableCell>
+                      <TableCell className="text-right">{percentualFracao(r.pesos?.pesos[chave] ?? null)}</TableCell>
                       <TableCell className="text-right">{moeda(valor)}</TableCell>
+                      {funil &&
+                        METRICAS_FUNIL.map((m) => {
+                          const a = funil[m];
+                          const peso = a.pesos.pesos[chave];
+                          return (
+                            <TableCell key={m} className="text-right" title={`Peso ${percentualFracao(peso)}`}>
+                              {valorMetrica(m, a.meta === null ? null : a.meta * peso)}
+                            </TableCell>
+                          );
+                        })}
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-muted-foreground">
+                    <TableCell colSpan={funil ? 6 : 3} className="text-muted-foreground">
                       Meta do mês não definida. Defina em “Meta do mês”.
                     </TableCell>
                   </TableRow>
@@ -132,10 +261,11 @@ export function PaginaCliente() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Meta diária necessária</CardTitle>
+            <CardTitle>Ritmo necessário por dia</CardTitle>
             <CardDescription>
-              O que falta (meta − realizado) distribuído pelos dias restantes conforme o peso de cada dia
-              {r.pesos?.origem === 'historico' ? ' (histórico do ano anterior).' : ' (pesos da meta).'}
+              Ponderado: o que falta (meta − realizado) de cada métrica distribuído pelos dias restantes conforme o
+              peso de cada dia na própria métrica
+              {r.pesos?.origem === 'historico' ? ' (receita: histórico do ano anterior).' : ' (receita: pesos da meta).'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -145,8 +275,14 @@ export function PaginaCliente() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Dia</TableHead>
-                      <TableHead className="text-right">Peso do dia</TableHead>
-                      <TableHead className="text-right">Necessário</TableHead>
+                      <TableHead className="text-right">Peso receita</TableHead>
+                      <TableHead className="text-right">Receita</TableHead>
+                      {funil &&
+                        METRICAS_FUNIL.map((m) => (
+                          <TableHead key={m} className="text-right">
+                            {ROTULO_METRICA[m]}
+                          </TableHead>
+                        ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -157,6 +293,19 @@ export function PaginaCliente() {
                         </TableCell>
                         <TableCell className="text-right">{percentualFracao(d.peso)}</TableCell>
                         <TableCell className="text-right">{moeda(d.valor)}</TableCell>
+                        {funil &&
+                          METRICAS_FUNIL.map((m, i) => {
+                            const dia = cronogramaFunil[i]?.get(d.dia);
+                            return (
+                              <TableCell
+                                key={m}
+                                className="text-right"
+                                title={dia ? `Peso do dia ${percentualFracao(dia.peso)}` : undefined}
+                              >
+                                {valorMetrica(m, dia?.valor ?? null)}
+                              </TableCell>
+                            );
+                          })}
                       </TableRow>
                     ))}
                   </TableBody>

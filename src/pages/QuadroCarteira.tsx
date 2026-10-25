@@ -14,7 +14,7 @@ import { useCarteira } from '@/hooks/consultas';
 type Aba = 'diario' | 'decendio' | 'mensal';
 
 const ABAS: Array<{ id: Aba; rotulo: string; descricao: string }> = [
-  { id: 'diario', rotulo: 'Diário', descricao: 'Ritmo atual contra o necessário por dia, distribuído pelos pesos históricos do mesmo mês do ano anterior' },
+  { id: 'diario', rotulo: 'Diário', descricao: 'Ritmo atual contra o ritmo necessário por dia, ponderado pelos pesos históricos do mesmo mês do ano anterior (cada métrica com os seus pesos)' },
   { id: 'decendio', rotulo: 'Decêndio', descricao: 'Meta de cada decêndio e projeção (realizado ÷ peso acumulado), pelos pesos históricos' },
   { id: 'mensal', rotulo: 'Mensal e anual', descricao: 'Projeção, grade e situação do mês' },
 ];
@@ -140,13 +140,24 @@ function TabelaCarteira({ aba, linhas }: { aba: Aba; linhas: LinhaCarteira[] }) 
           <TableHead className="text-right">% atingido</TableHead>
           {aba === 'diario' && (
             <>
-              <TableHead className="text-right">Ritmo/dia</TableHead>
-              <TableHead className="text-right" title="Próximo dia: falta × peso do dia ÷ peso dos dias restantes">
-                Necessário amanhã
+              <TableHead className="text-right" title="Realizado ÷ dias fechados">
+                Ritmo atual/dia
               </TableHead>
-              <TableHead className="text-right">Média necessária/dia</TableHead>
+              <TableHead
+                className="text-right"
+                title="Ponderado pelos pesos históricos: falta × peso do próximo dia ÷ peso dos dias restantes"
+              >
+                Ritmo necessário/dia
+              </TableHead>
               <TableHead className="text-right">Aceleração</TableHead>
-              <TableHead>Pesos</TableHead>
+              <TableHead>Pesos receita</TableHead>
+              <TableHead
+                className="text-right"
+                title="Investimento projetado (realizado ÷ peso acumulado do investimento) ÷ orçamento do mês"
+              >
+                Invest. proj. ÷ orçamento
+              </TableHead>
+              <TableHead>Pesos invest.</TableHead>
             </>
           )}
           {aba === 'decendio' && (
@@ -191,12 +202,17 @@ function TabelaCarteira({ aba, linhas }: { aba: Aba; linhas: LinhaCarteira[] }) 
                 <>
                   <TableCell className="text-right">{moeda(r.diaria?.ritmoAtual ?? null)}</TableCell>
                   <TableCell className="text-right">{moeda(r.diaria?.necessaria ?? null)}</TableCell>
-                  <TableCell className="text-right">{moeda(r.diaria?.necessariaMedia ?? null)}</TableCell>
                   <TableCell className="text-right">
                     {r.diaria?.aceleracao == null ? '—' : `${decimal(r.diaria.aceleracao)}×`}
                   </TableCell>
                   <TableCell>
                     <BadgePesos pesos={r.pesos} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {percentualFracao(linha.funil?.investimento.percentualProjetado ?? null)}
+                  </TableCell>
+                  <TableCell>
+                    <BadgePesos pesos={linha.funil?.investimento.pesos ?? null} fonte="v_metrics_daily" />
                   </TableCell>
                 </>
               )}
