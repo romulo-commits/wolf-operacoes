@@ -105,11 +105,25 @@ Como na planilha, cada métrica tem os seus pesos por decêndio, com a mesma reg
 | Métrica | Meta do mês (premissas da calculadora) | Realizado (até o último dia fechado) | Histórico dos pesos (mesmo mês do ano anterior) |
 |---|---|---|---|
 | Receita | `meta_mes.meta_receita` | receita aprovada lançada | `v_analytics_diario.revenue` |
-| Investimento | orçamento | `v_metrics_daily.spend`, Meta + Google | `v_metrics_daily.spend`, Meta + Google |
+| Investimento | orçamento | `v_metrics_daily.spend`, soma das fontes configuradas (hoje Meta + Google; seção 4.6) | idem, mesmo mês do ano anterior |
 | Sessões | orçamento ÷ CPS | `v_analytics_diario.sessions` | `v_analytics_diario.sessions` |
-| Pedidos | sessões × conversão | pedidos aprovados lançados (mesma fonte da receita) **[?]** | `v_analytics_diario.transactions` |
+| Pedidos (GA4) | sessões × conversão | `v_analytics_diario.transactions` (transações do GA4) | `v_analytics_diario.transactions` |
+
+**Pedidos (decidido):** o acompanhamento diário, a projeção e o ritmo de pedidos usam as **transações do GA4**, com o rótulo "Pedidos (GA4)" na tela. Sem transações no mês, a métrica fica sem dado (não cai nos lançamentos). Os **pedidos aprovados lançados** continuam nos lançamentos, como contexto da receita oficial e da confiabilidade do tracking.
 
 Para cada uma: esperado até ontem = meta × peso acumulado; projeção = realizado ÷ peso acumulado; projeção ÷ meta; ritmo necessário por dia ponderado; metas por decêndio. A página do cliente mostra a tabela por métrica com o selo de pesos de cada uma, as metas por decêndio das quatro e o ritmo necessário de cada dia restante para as quatro. O quadro (aba Diário) mostra o investimento projetado ÷ orçamento com o selo de pesos do investimento.
+
+### 4.6 Fontes de investimento (configuráveis)
+
+Por enquanto o investimento soma **Meta e Google**. As fontes ficam em `src/config/investimento.ts` (`FONTES_INVESTIMENTO`), cada uma com `id`, `rotulo`, `origem` (view lida) e `platform` (valor da coluna `platform` na origem). Essa lista é usada:
+
+- na **leitura** (`lerInvestimento` em `src/data/wolfos/carteira.ts`): um select por origem, filtrando `platform` pelas plataformas configuradas e marcando cada linha com o `id` da fonte;
+- no **cálculo** (`montarLinhasCarteira`): soma só as fontes configuradas no realizado e no histórico dos pesos, e devolve a quebra por fonte (`investimentoPorFonte`), exibida na página do cliente.
+
+**Como acrescentar uma fonte (ex.: TikTok, Pinterest):**
+1. Se ela já vem em `v_metrics_daily`: acrescente `{ id: 'tiktok', rotulo: 'TikTok Ads', origem: 'v_metrics_daily', platform: 'tiktok' }` em `FONTES_INVESTIMENTO` (há exemplos comentados no arquivo). **[?]** Confirmar o valor de `platform` no banco. Nada mais muda.
+2. Se vier de outra view/tabela: acrescente o nome em `OrigemInvestimento` e um `case` em `lerInvestimento` com o select (somente leitura) que devolva `{ clientId, date, fonte, valor }`. O domínio não muda.
+3. Atenção: a fonte nova passa a entrar também nos pesos históricos do investimento. Se ela não existia no ano anterior, os pesos refletem só as outras fontes naquele período.
 
 ## 5. O que você precisaria criar ou anexar
 
@@ -145,14 +159,14 @@ Os nomes vêm do inventário de 25/10/2026. Os pontos marcados com **[?]** preci
 | wolfos-ads | `v_sync_saude` | `client_id`, `platform`, `dias_atrasado`, `last_sync_error`, `ultima_data_com_dado` | sem filtro |
 | wolfos-ads | `v_analytics_diario` | `client_id`, `date`, `revenue`, `sessions`, `transactions` | `date` no mês e até hoje |
 | wolfos-ads | `v_analytics_diario` | `client_id`, `date` **[?]** (tipo `date` ou texto AAAA-MM-DD), `revenue` **[?]** (receita total do GA4, não só e-commerce), `sessions`, `transactions` **[?]** (transações = pedidos) | `date` do dia 1 ao último dia do **mesmo mês do ano anterior** (pesos históricos) |
-| wolfos-ads | `v_metrics_daily` | `client_id`, `date`, `spend` | `platform in ('meta','google')` **[?]**, `date` no mês e até hoje |
-| wolfos-ads | `v_metrics_daily` | `client_id`, `date`, `spend` | `platform in ('meta','google')` **[?]**, `date` do dia 1 ao último dia do **mesmo mês do ano anterior** (pesos do investimento) |
+| wolfos-ads | `v_metrics_daily` | `client_id`, `date`, `platform`, `spend` | `platform in` (fontes de `src/config/investimento.ts`, hoje `'meta','google'`) **[?]**, `date` no mês e até hoje |
+| wolfos-ads | `v_metrics_daily` | `client_id`, `date`, `platform`, `spend` | idem, `date` do dia 1 ao último dia do **mesmo mês do ano anterior** (pesos do investimento) |
 
 Pontos a conferir:
 - **Paginação:** a leitura pagina por intervalo ordenado por uma coluna que não é única (`name`, `client_id`, `date`). Em produção, usar chave única ou janela estável.
 - **`v_analytics_diario`** tem uma linha por canal × dia. O app soma os canais. **[?]** Confirmar que a soma dos canais não duplica receita (ex.: um canal "total" junto com os canais).
-- **`v_metrics_daily`:** o app soma as linhas por cliente × dia. **[?]** Confirmar que a view tem uma linha por cliente × plataforma × dia (sem níveis campanha/conjunto/anúncio somados juntos, o que duplicaria o investimento) e que os valores de `platform` são `meta` e `google` (como em `platform_accounts`). `ad_metrics_daily` não foi usada: não tem `client_id` e tem a coluna `level`. **[?]** Confirmar se outras plataformas de mídia devem entrar no investimento.
-- **`sessions` e `transactions`:** nulo = sem dado (não conta como zero). **[?]** Confirmar os nomes e se `transactions` é o número de pedidos do GA4.
+- **`v_metrics_daily`:** o app soma as linhas por cliente × dia. **[?]** Confirmar que a view tem uma linha por cliente × plataforma × dia (sem níveis campanha/conjunto/anúncio somados juntos, o que duplicaria o investimento) e que os valores de `platform` são `meta` e `google` (como em `platform_accounts`). `ad_metrics_daily` não foi usada: não tem `client_id` e tem a coluna `level`. Outras plataformas entram pela configuração (seção 4.6).
+- **`sessions` e `transactions`:** nulo = sem dado (não conta como zero). **[?]** Confirmar os nomes das colunas; `transactions` é usada como pedidos do GA4 (decidido).
 - **Histórico da Argennti:** GA4 completo desde 01/2025, então o ano anterior existe a partir de jan/2026. **[?]** Confirmar cobertura dos outros clientes; sem ela, entra o fallback.
 - **`pdas`:** a contagem segue o inventário (pendentes fora da lixeira). A regra de "vencida" é `due_date` anterior a hoje.
 
@@ -164,7 +178,7 @@ Pontos a conferir:
 4. **Pesos por decêndio** vêm do mesmo mês do ano anterior, um conjunto por métrica (seções 4.4 e 4.5): receita GA4 (decidido), investimento de Meta + Google, sessões e transações do GA4. Os pesos `d1`/`d2`/`d3` da `meta_mes` são a reserva (fallback) de cada métrica. Em aberto: média de mais de um ano.
 5. **`lancado_por` e `updated_by`:** texto livre ou uuid de `auth.users`.
 6. **Realizado e projeção** usam a receita lançada. Se a receita oficial vier do Shopify ou de outra fonte, o lançamento continua sendo o ponto de entrada.
-7. **Pedidos realizados** vêm dos pedidos aprovados lançados, como a receita. Alternativa: transações do GA4 (as mesmas usadas nos pesos), que existem dia a dia mas não são a fonte oficial.
+7. **Pedidos realizados** (decidido): transações do GA4 no acompanhamento de pedidos; pedidos aprovados lançados só no contexto da receita oficial. **Fontes de investimento** (decidido): Meta + Google por enquanto, configuráveis (seção 4.6).
 
 ## 9. Como trocar o seed (metas de exemplo)
 
@@ -188,4 +202,4 @@ Arquivo: `src/data/local/seed.ts`.
 
 - Testes unitários: `npm test` (domínio, repositório local, camada de leitura e dados de exemplo).
 - Build: `npm run build` (checagem de tipos com `tsc -b` e build do Vite).
-- Build e testes rodados em 25/10/2026: 13 arquivos, 121 testes passando; `npm run build` ok.
+- Build e testes rodados em 25/10/2026: 13 arquivos, 125 testes passando; `npm run build` ok.

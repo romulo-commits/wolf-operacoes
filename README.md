@@ -16,7 +16,9 @@ Regras de negócio:
 
 - **Receita oficial** = receita aprovada lançada. O GA4 é comparado a ela (índice de confiabilidade do tracking), nunca o contrário.
 - **Meta do mês** é fixa. Qualquer alteração exige motivo, autor e data.
-- **Pesos por decêndio** vêm do mesmo mês do ano anterior, um conjunto para cada métrica (receita e sessões/pedidos do GA4, investimento de Meta + Google). Sem histórico suficiente, cada métrica cai nos pesos `d1`/`d2`/`d3` da meta.
+- **Pesos por decêndio** vêm do mesmo mês do ano anterior, um conjunto para cada métrica (receita, sessões e pedidos do GA4, investimento das fontes de `src/config/investimento.ts`, hoje Meta + Google). Sem histórico suficiente, cada métrica cai nos pesos `d1`/`d2`/`d3` da meta.
+- **Pedidos (GA4)** no acompanhamento = transações do GA4. Os pedidos aprovados lançados ficam nos lançamentos (receita oficial).
+- **Fontes de investimento** são configuráveis em `src/config/investimento.ts`: para somar TikTok, Pinterest etc., acrescente a fonte na lista (ver docs/ENTREGA_AUGUSTO.md, seção 4.6).
 - **Ritmo necessário por dia** é sempre o ponderado: falta × peso do dia ÷ peso dos dias restantes. Não há média simples.
 - **Grade G0–G3** cruza o atingimento da meta (projeção ÷ meta) com a variação contra o ano anterior. Matriz em `src/domain/grade-config.ts` (proposta a validar).
 - **Bancos do WOLFOS são somente leitura.** O código só faz `select`. Um teste garante que não há `insert`, `update`, `upsert`, `delete` nem `rpc` na camada de leitura.
@@ -57,6 +59,7 @@ src/
     wolfos/        LEITURA do WOLFOS (somente select) + dados de exemplo
     local/         metas e lançamentos (repositório local, seed editável)
     piloto.ts      IDs dos clientes (piloto Argennti + exemplos)
+  config/          fontes de investimento em mídia (configuráveis)
   hooks/           consultas do TanStack Query
   pages/           telas (quadro, cliente, meta, lançamento, conexões)
   components/      layout, status e primitivos shadcn/ui
