@@ -3,6 +3,7 @@ import type { NotaGradeComSemDado } from '@/domain/grade';
 import type { StatusMeta } from '@/domain/projecao';
 import type { StatusTracking } from '@/domain/tracking';
 import type { Alerta } from '@/domain/alertas';
+import type { PesosAplicados } from '@/domain/pesos';
 import {
   classesNota,
   classesSeveridadeAlerta,
@@ -54,5 +55,21 @@ export function BadgesAlertas({ alertas }: { alertas: Alerta[] }) {
         </Badge>
       ))}
     </div>
+  );
+}
+
+/** De onde vieram os pesos: histórico do ano anterior ou fallback da meta. */
+export function BadgePesos({ pesos }: { pesos: PesosAplicados | null }) {
+  if (!pesos) return traco;
+  const { d1, d2, d3 } = pesos.pesos;
+  const detalhe = `D1 ${percentualFracao(d1)} · D2 ${percentualFracao(d2)} · D3 ${percentualFracao(d3)}`;
+  return pesos.origem === 'historico' ? (
+    <Badge variant="outline" title={`Mesmo mês do ano anterior (GA4). ${detalhe}`}>
+      Histórico ano ant.
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="border-atencao/40 text-atencao" title={`Sem histórico suficiente: pesos da meta. ${detalhe}`}>
+      Pesos da meta
+    </Badge>
   );
 }

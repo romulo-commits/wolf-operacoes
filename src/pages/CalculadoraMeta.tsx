@@ -118,7 +118,7 @@ function MetaDefinida({
             <Linha rotulo="CPS" valor={moeda(metaAtual.premissas.cps, true)} />
             <Linha rotulo="Conversão" valor={percentualFracao(metaAtual.premissas.conversao)} />
             <Linha rotulo="Ticket médio" valor={moeda(metaAtual.premissas.ticket, true)} />
-            <Linha rotulo="Pesos D1 / D2 / D3" valor={`${percentualFracao(metaAtual.pesos.d1)} / ${percentualFracao(metaAtual.pesos.d2)} / ${percentualFracao(metaAtual.pesos.d3)}`} />
+            <Linha rotulo="Pesos D1 / D2 / D3 (só sem histórico)" valor={`${percentualFracao(metaAtual.pesos.d1)} / ${percentualFracao(metaAtual.pesos.d2)} / ${percentualFracao(metaAtual.pesos.d3)}`} />
             <Linha rotulo="Última alteração" valor={metaAtual.motivoAlteracao ? `${metaAtual.motivoAlteracao} (${metaAtual.updatedBy ?? '—'}, ${dataBr(metaAtual.updatedAt?.slice(0, 10) ?? null)})` : 'Definição original'} />
           </TableBody>
         </Table>
@@ -264,9 +264,13 @@ function FormularioMeta({
         <CampoNumero id="cps" rotulo="CPS (R$)" valor={campos.cps} onChange={atualizar('cps')} step="0.01" />
         <CampoNumero id="conversao" rotulo="Conversão (%)" valor={campos.conversao} onChange={atualizar('conversao')} step="0.01" />
         <CampoNumero id="ticket" rotulo="Ticket médio (R$)" valor={campos.ticket} onChange={atualizar('ticket')} step="0.01" />
-        <CampoNumero id="d1" rotulo="Peso D1 (%)" valor={campos.d1} onChange={atualizar('d1')} step="0.01" />
-        <CampoNumero id="d2" rotulo="Peso D2 (%)" valor={campos.d2} onChange={atualizar('d2')} step="0.01" />
-        <CampoNumero id="d3" rotulo="Peso D3 (%)" valor={campos.d3} onChange={atualizar('d3')} step="0.01" />
+        <CampoNumero id="d1" rotulo="Peso D1 (%) · reserva" valor={campos.d1} onChange={atualizar('d1')} step="0.01" />
+        <CampoNumero id="d2" rotulo="Peso D2 (%) · reserva" valor={campos.d2} onChange={atualizar('d2')} step="0.01" />
+        <CampoNumero id="d3" rotulo="Peso D3 (%) · reserva" valor={campos.d3} onChange={atualizar('d3')} step="0.01" />
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          Os pesos por decêndio vêm do histórico do mesmo mês no ano anterior (GA4). Os pesos acima só são usados
+          quando esse histórico não existe ou está incompleto.
+        </p>
         <div className="space-y-1.5">
           <Label htmlFor="autor">Responsável</Label>
           <Input id="autor" value={campos.autor} onChange={atualizar('autor')} placeholder="Seu nome" />

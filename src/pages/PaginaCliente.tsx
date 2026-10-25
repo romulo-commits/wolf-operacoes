@@ -1,5 +1,5 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { BadgeNota, BadgeStatusMeta, BadgeSync, BadgeTracking, BadgesAlertas } from '@/components/status';
+import { BadgeNota, BadgePesos, BadgeStatusMeta, BadgeSync, BadgeTracking, BadgesAlertas } from '@/components/status';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -83,13 +83,18 @@ export function PaginaCliente() {
         <BadgeNota nota={r.grade.nota} />
         <BadgeSync diasAtraso={linha.syncDiasAtraso} erro={linha.syncErro} />
         <BadgeTracking status={linha.statusTracking} indice={linha.indiceTracking} />
+        <BadgePesos pesos={r.pesos} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Metas por decêndio</CardTitle>
-            <CardDescription>Meta do mês distribuída pelos pesos de cada decêndio.</CardDescription>
+            <CardDescription>
+              {r.pesos?.origem === 'meta'
+                ? 'Sem histórico suficiente do mesmo mês no ano anterior: usando os pesos d1/d2/d3 da meta.'
+                : 'Meta do mês distribuída pelos pesos históricos (mesmo mês do ano anterior, GA4).'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -101,11 +106,11 @@ export function PaginaCliente() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {meta ? (
+                {meta && r.pesos ? (
                   ([
-                    ['D1 (dias 1–10)', meta.pesos.d1, r.metasDecendio?.[1] ?? null],
-                    ['D2 (dias 11–20)', meta.pesos.d2, r.metasDecendio?.[2] ?? null],
-                    ['D3 (dias 21–fim)', meta.pesos.d3, r.metasDecendio?.[3] ?? null],
+                    ['D1 (dias 1–10)', r.pesos.pesos.d1, r.metasDecendio?.[1] ?? null],
+                    ['D2 (dias 11–20)', r.pesos.pesos.d2, r.metasDecendio?.[2] ?? null],
+                    ['D3 (dias 21–fim)', r.pesos.pesos.d3, r.metasDecendio?.[3] ?? null],
                   ] as const).map(([rotulo, peso, valor]) => (
                     <TableRow key={rotulo}>
                       <TableCell>{rotulo}</TableCell>
@@ -122,6 +127,46 @@ export function PaginaCliente() {
                 )}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Meta diária necessária</CardTitle>
+            <CardDescription>
+              O que falta (meta − realizado) distribuído pelos dias restantes conforme o peso de cada dia
+              {r.pesos?.origem === 'historico' ? ' (histórico do ano anterior).' : ' (pesos da meta).'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {r.diaria && r.diaria.cronograma.length > 0 ? (
+              <div className="max-h-80 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Dia</TableHead>
+                      <TableHead className="text-right">Peso do dia</TableHead>
+                      <TableHead className="text-right">Necessário</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {r.diaria.cronograma.map((d) => (
+                      <TableRow key={d.dia}>
+                        <TableCell>
+                          {String(d.dia).padStart(2, '0')}/{String(periodo.mes).padStart(2, '0')}
+                        </TableCell>
+                        <TableCell className="text-right">{percentualFracao(d.peso)}</TableCell>
+                        <TableCell className="text-right">{moeda(d.valor)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {meta ? 'Sem dias restantes no mês.' : 'Sem meta definida para este mês.'}
+              </p>
+            )}
           </CardContent>
         </Card>
 

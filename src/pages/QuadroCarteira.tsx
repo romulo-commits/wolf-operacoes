@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BadgeNota, BadgeStatusMeta, BadgeSync, BadgeTracking, BadgesAlertas } from '@/components/status';
+import { BadgeNota, BadgeStatusMeta, BadgeSync, BadgeTracking, BadgesAlertas, BadgePesos } from '@/components/status';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +14,8 @@ import { useCarteira } from '@/hooks/consultas';
 type Aba = 'diario' | 'decendio' | 'mensal';
 
 const ABAS: Array<{ id: Aba; rotulo: string; descricao: string }> = [
-  { id: 'diario', rotulo: 'Diário', descricao: 'Ritmo atual contra o necessário por dia' },
-  { id: 'decendio', rotulo: 'Decêndio', descricao: 'Meta de cada decêndio e projeção de fechamento' },
+  { id: 'diario', rotulo: 'Diário', descricao: 'Ritmo atual contra o necessário por dia, distribuído pelos pesos históricos do mesmo mês do ano anterior' },
+  { id: 'decendio', rotulo: 'Decêndio', descricao: 'Meta de cada decêndio e projeção (realizado ÷ peso acumulado), pelos pesos históricos' },
   { id: 'mensal', rotulo: 'Mensal e anual', descricao: 'Projeção, grade e situação do mês' },
 ];
 
@@ -141,8 +141,12 @@ function TabelaCarteira({ aba, linhas }: { aba: Aba; linhas: LinhaCarteira[] }) 
           {aba === 'diario' && (
             <>
               <TableHead className="text-right">Ritmo/dia</TableHead>
-              <TableHead className="text-right">Necessário/dia</TableHead>
+              <TableHead className="text-right" title="Próximo dia: falta × peso do dia ÷ peso dos dias restantes">
+                Necessário amanhã
+              </TableHead>
+              <TableHead className="text-right">Média necessária/dia</TableHead>
               <TableHead className="text-right">Aceleração</TableHead>
+              <TableHead>Pesos</TableHead>
             </>
           )}
           {aba === 'decendio' && (
@@ -153,6 +157,7 @@ function TabelaCarteira({ aba, linhas }: { aba: Aba; linhas: LinhaCarteira[] }) 
               <TableHead className="text-right">Peso acumulado</TableHead>
               <TableHead className="text-right">Projeção</TableHead>
               <TableHead className="text-right">Gap projetado</TableHead>
+              <TableHead>Pesos</TableHead>
             </>
           )}
           {aba === 'mensal' && (
@@ -186,8 +191,12 @@ function TabelaCarteira({ aba, linhas }: { aba: Aba; linhas: LinhaCarteira[] }) 
                 <>
                   <TableCell className="text-right">{moeda(r.diaria?.ritmoAtual ?? null)}</TableCell>
                   <TableCell className="text-right">{moeda(r.diaria?.necessaria ?? null)}</TableCell>
+                  <TableCell className="text-right">{moeda(r.diaria?.necessariaMedia ?? null)}</TableCell>
                   <TableCell className="text-right">
                     {r.diaria?.aceleracao == null ? '—' : `${decimal(r.diaria.aceleracao)}×`}
+                  </TableCell>
+                  <TableCell>
+                    <BadgePesos pesos={r.pesos} />
                   </TableCell>
                 </>
               )}
@@ -199,6 +208,9 @@ function TabelaCarteira({ aba, linhas }: { aba: Aba; linhas: LinhaCarteira[] }) 
                   <TableCell className="text-right">{percentualFracao(r.pesoAcumulado)}</TableCell>
                   <TableCell className="text-right">{moeda(r.projecao)}</TableCell>
                   <TableCell className="text-right">{moeda(r.gapProjetado)}</TableCell>
+                  <TableCell>
+                    <BadgePesos pesos={r.pesos} />
+                  </TableCell>
                 </>
               )}
               {aba === 'mensal' && (
