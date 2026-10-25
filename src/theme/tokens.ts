@@ -45,3 +45,16 @@ export const rotuloTracking: Record<StatusTracking, string> = {
   divergente: 'Divergente',
   sem_dado: 'Sem dado',
 };
+
+/** Saúde do sync pelos dias de atraso: em dia até 1, atenção de 2 a 7, crítico a partir de 8. */
+export function estadoSync(diasAtraso: number | null): { rotulo: string; classes: string } {
+  if (diasAtraso === null) return { rotulo: 'Sem dado', classes: classesTracking.sem_dado };
+  if (diasAtraso <= 1) return { rotulo: 'Em dia', classes: classesTracking.ok };
+  if (diasAtraso < 8) return { rotulo: `Atraso ${diasAtraso} dias`, classes: classesTracking.divergente };
+  return { rotulo: `Atraso ${diasAtraso} dias`, classes: classesStatusMeta.em_risco };
+}
+
+export const classesSeveridadeAlerta = {
+  atencao: 'bg-atencao/15 text-atencao border-atencao/30',
+  critico: 'bg-critico/15 text-critico border-critico/30',
+} as const;
