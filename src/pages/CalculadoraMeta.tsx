@@ -1,14 +1,20 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { CalculadoraReversaCard } from '@/components/meta/CalculadoraReversaCard';
+import { ControleLancamento } from '@/components/meta/ControleLancamento';
+import { ListaSemMeta } from '@/components/meta/ListaSemMeta';
+import { referenciasDoCliente, ReferenciasBloco } from '@/components/meta/ReferenciasBloco';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, campoSelect } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { simularMeta } from '@/domain/calculadora';
-import type { MetaMes, Premissas } from '@/domain/tipos';
-import { decimal, dataBr, inteiro, mesParaInput, mesPorExtenso, moeda, parseMesInput, percentualFracao } from '@/lib/formatar';
-import { useAlterarMeta, useCarteira, useCriarMeta, useMetas } from '@/hooks/consultas';
+import { REFERENCIA_BREAK_EVEN_ARGENNTI } from '@/data/local/historico-exemplo';
 import { MOTIVO_MINIMO_CARACTERES, validarDadosMeta, type DadosMeta } from '@/data/local/repositorio';
+import { roasDe } from '@/domain/calculadora';
+import type { MetaMes } from '@/domain/tipos';
+import { CLIENTE_ARGENNTI_ID } from '@/data/piloto';
+import { useAlterarMeta, useCarteira, useControles, useCriarMeta, useMetas } from '@/hooks/consultas';
+import { dataBr, mesParaInput, mesPorExtenso, moeda, parseMesInput, percentualFracao } from '@/lib/formatar';
 import { cn } from '@/lib/utils';
 
 /** Valor de fração (0,0143) para o campo em percentual ("1,43"). */
@@ -22,19 +28,26 @@ export function CalculadoraMeta() {
   const periodo = parseMesInput(valorMes) ?? { ano: hoje.getFullYear(), mes: hoje.getMonth() + 1 };
   const carteira = useCarteira(periodo.ano, periodo.mes);
   const metas = useMetas();
+  const controles = useControles();
 
   const clientes = carteira.data?.clientes ?? [];
   const clienteId = clienteEscolhido || clientes[0]?.id || '';
   const nomeCliente = clientes.find((c) => c.id === clienteId)?.nome ?? '';
   const metaAtual: MetaMes | null =
     metas.data?.find((m) => m.clientId === clienteId && m.ano === periodo.ano && m.mes === periodo.mes) ?? null;
+  const controleAtual =
+    controles.data?.find((item) => item.clientId === clienteId && item.ano === periodo.ano && item.mes === periodo.mes) ?? null;
+  const referencias = clienteId ? referenciasDoCliente(clienteId, periodo.ano, periodo.mes, metaAtual?.metaReceita ?? null) : null;
+  const roasHistorico = referencias?.pontoAnoAnterior
+    ? roasDe(referencias.pontoAnoAnterior.receita, referencias.pontoAnoAnterior.investimento)
+    : null;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Meta do mês e calculadora</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Quadro de metas</h1>
         <p className="text-sm text-muted-foreground">
-          A meta é fixa depois de definida. Alterações exigem motivo. O simulador não grava nada.
+          A meta definida no início do mês continua fixa: esta tela não a regrava. Ano anterior, médias base e sazonalidade são referência. O controle de lançamento fica à parte.
         </p>
       </div>
 
@@ -60,36 +73,55 @@ export function CalculadoraMeta() {
         </div>
       </div>
 
+      <ListaSemMeta
+        clientes={clientes}
+        metas={metas.data ?? []}
+        controles={controles.data ?? []}
+        ano={periodo.ano}
+        mes={periodo.mes}
+        onEscolher={setClienteEscolhido}
+      />
+
       {!clienteId && <p className="text-sm text-muted-foreground">Nenhum cliente ativo.</p>}
 
       {clienteId && (
-        <div className="grid gap-6 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Meta de {mesPorExtenso(periodo.ano, periodo.mes)}</CardTitle>
-              <CardDescription>{nomeCliente}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <MetaDefinida
-                key={`${clienteId}-${valorMes}-${metaAtual?.updatedAt ?? 'nova'}`}
-                clienteId={clienteId}
-                ano={periodo.ano}
-                mes={periodo.mes}
-                metaAtual={metaAtual}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Simulador</CardTitle>
-              <CardDescription>Sessões = orçamento ÷ CPS · Pedidos = sessões × conversão · Receita = pedidos × ticket.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Simulador key={metaAtual ? `meta-${metaAtual.updatedAt}` : 'sem-meta'} premissasMeta={metaAtual?.premissas ?? null} />
-            </CardContent>
-          </Card>
-        </div>
+        <>
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Meta de {mesPorExtenso(periodo.ano, periodo.mes)}</CardTitle>
+                <CardDescription>{nomeCliente}. Definir ou alterar continua exigindo responsável e, na alteração, motivo.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <MetaDefinida
+                  key={`${clienteId}-${valorMes}-${metaAtual?.updatedAt ?? 'nova'}`}
+                  clienteId={clienteId}
+                  ano={periodo.ano}
+                  mes={periodo.mes}
+                  metaAtual={metaAtual}
+                />
+              </CardContent>
+            </Card>
+            <CalculadoraReversaCard
+              key={`${clienteId}-${valorMes}-${metaAtual?.updatedAt ?? 'sem'}`}
+              metaInicial={metaAtual?.metaReceita ?? null}
+              ticketInicial={metaAtual?.premissas.ticket ?? null}
+              conversaoInicial={metaAtual?.premissas.conversao ?? null}
+              cpsInicial={metaAtual?.premissas.cps ?? null}
+              roasHistorico={roasHistorico}
+              fonteHistorico={referencias?.pontoAnoAnterior?.fonte ?? null}
+              sugestaoBreakEven={clienteId === CLIENTE_ARGENNTI_ID ? REFERENCIA_BREAK_EVEN_ARGENNTI : null}
+            />
+          </div>
+          <ReferenciasBloco clientId={clienteId} ano={periodo.ano} mes={periodo.mes} meta={metaAtual?.metaReceita ?? null} />
+          <ControleLancamento
+            key={`${clienteId}-${valorMes}-${controleAtual?.updatedAt ?? 'sem-controle'}`}
+            clientId={clienteId}
+            ano={periodo.ano}
+            mes={periodo.mes}
+            controle={controleAtual}
+          />
+        </>
       )}
     </div>
   );
@@ -327,67 +359,3 @@ function CampoNumero({
   );
 }
 
-function Simulador({ premissasMeta }: { premissasMeta: Premissas | null }) {
-  const inicial = premissasMeta
-    ? {
-        orcamento: String(premissasMeta.orcamento),
-        cps: String(premissasMeta.cps),
-        conversao: fracaoParaPercentual(premissasMeta.conversao),
-        ticket: String(premissasMeta.ticket),
-      }
-    : { orcamento: '25000', cps: '0.20', conversao: '0.53', ticket: '661.48' };
-  const [campos, setCampos] = useState(inicial);
-
-  const premissas: Premissas | null =
-    campos.orcamento && campos.cps && campos.conversao && campos.ticket
-      ? {
-          orcamento: Number(campos.orcamento),
-          cps: Number(campos.cps),
-          conversao: Number(campos.conversao) / 100,
-          ticket: Number(campos.ticket),
-        }
-      : null;
-
-  let resultado: ReturnType<typeof simularMeta> | null = null;
-  let erro: string | null = null;
-  if (premissas) {
-    try {
-      resultado = simularMeta(premissas);
-    } catch (e) {
-      erro = e instanceof Error ? e.message : 'Premissas inválidas.';
-    }
-  }
-
-  const atualizar = (campo: keyof typeof campos) => (e: ChangeEvent<HTMLInputElement>) =>
-    setCampos((anterior) => ({ ...anterior, [campo]: e.target.value }));
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <CampoNumero id="sim-orcamento" rotulo="Orçamento (R$)" valor={campos.orcamento} onChange={atualizar('orcamento')} />
-        <CampoNumero id="sim-cps" rotulo="CPS (R$)" valor={campos.cps} onChange={atualizar('cps')} step="0.01" />
-        <CampoNumero id="sim-conversao" rotulo="Conversão (%)" valor={campos.conversao} onChange={atualizar('conversao')} step="0.01" />
-        <CampoNumero id="sim-ticket" rotulo="Ticket médio (R$)" valor={campos.ticket} onChange={atualizar('ticket')} step="0.01" />
-      </div>
-
-      {erro && <p className="text-sm text-critico">{erro}</p>}
-      {resultado && (
-        <Table>
-          <TableBody>
-            <Linha rotulo="Sessões" valor={inteiro(resultado.sessoes)} />
-            <Linha rotulo="Pedidos" valor={inteiro(resultado.pedidos)} />
-            <Linha rotulo="Receita simulada" valor={moeda(resultado.receita)} />
-            <Linha rotulo="ROAS" valor={`${decimal(resultado.roas)}×`} />
-            <Linha rotulo="CPA" valor={moeda(resultado.cpa, true)} />
-          </TableBody>
-        </Table>
-      )}
-
-      {premissasMeta && (
-        <Button variant="outline" size="sm" onClick={() => setCampos(inicial)}>
-          Voltar às premissas da meta
-        </Button>
-      )}
-    </div>
-  );
-}

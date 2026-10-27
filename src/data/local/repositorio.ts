@@ -1,6 +1,7 @@
 import { simularMeta } from '@/domain/calculadora';
 import { validarPesos } from '@/domain/projecao';
 import type { FonteLancamento, LancamentoReceita, MetaMes, PesosDecendio, Premissas } from '@/domain/tipos';
+import { criarCiclo, type RepositorioCiclo } from './ciclo';
 import { sementeLancamentos, sementeMetas } from './seed';
 
 /**
@@ -47,7 +48,7 @@ export interface RepositorioLancamentos {
   criar(novo: NovoLancamento): Promise<LancamentoReceita>;
 }
 
-export interface Repositorios {
+export interface Repositorios extends RepositorioCiclo {
   metas: RepositorioMetas;
   lancamentos: RepositorioLancamentos;
 }
@@ -138,8 +139,10 @@ export function criarRepositoriosLocais(
   const lerMetas = () => lerLista(armazenamento, CHAVE_METAS, sementeMetas);
   const lerLancamentos = () => lerLista(armazenamento, CHAVE_LANCAMENTOS, sementeLancamentos);
   const gravar = (chave: string, lista: unknown[]) => armazenamento.setItem(chave, JSON.stringify(lista));
+  const ciclo = criarCiclo(armazenamento, agora);
 
   return {
+    ...ciclo,
     metas: {
       async listar() {
         return lerMetas();

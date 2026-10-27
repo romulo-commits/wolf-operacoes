@@ -1,4 +1,4 @@
-import { BarChart3, CalendarRange, Cable, Receipt, Calculator } from 'lucide-react';
+import { BarChart3, CalendarRange, Cable, ClipboardList, Receipt, Calculator } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { obterLeiturasWolfos } from '@/data/wolfos/conexao';
 import { cn } from '@/lib/utils';
@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 const navegacao = [
   { to: '/', rotulo: 'Quadro da carteira', icone: BarChart3, fim: true },
   { to: '/meta', rotulo: 'Meta do mês', icone: Calculator, fim: false },
+  { to: '/plano', rotulo: 'Plano de mídia', icone: ClipboardList, fim: false },
   { to: '/lancamentos', rotulo: 'Lançamento de receita', icone: Receipt, fim: false },
   { to: '/conexoes', rotulo: 'Conexões', icone: Cable, fim: false },
 ];

@@ -3,12 +3,16 @@ import { montarLinhasCarteira } from '@/domain/carteira';
 import type { LancamentoReceita, MetaMes } from '@/domain/tipos';
 import { carregarDadosWolfos, consolidarSync } from '@/data/wolfos/carteira';
 import { repositorios } from '@/data/local';
+import type { AvancoPlano, NovoControle } from '@/data/local/ciclo';
 import type { AlteracaoMeta, NovaMeta, NovoLancamento } from '@/data/local/repositorio';
+import type { PlanoMidia } from '@/domain/plano-midia';
 
 export const chaves = {
   carteira: (ano: number, mes: number) => ['carteira', ano, mes] as const,
   metas: ['metas'] as const,
   lancamentos: ['lancamentos'] as const,
+  controles: ['controles'] as const,
+  planos: ['planos'] as const,
 };
 
 /** Carteira do mês: metas, realizado, projeção, grade, tracking, sync e PDAs por cliente. */
@@ -92,6 +96,52 @@ export function useAlterarMeta() {
   const invalidar = useInvalidarDerivados();
   return useMutation({
     mutationFn: (alteracao: AlteracaoMeta) => repositorios.metas.alterar(alteracao),
+    onSuccess: invalidar,
+  });
+}
+
+export function useControles() {
+  return useQuery({
+    queryKey: chaves.controles,
+    queryFn: () => repositorios.controles.listar(),
+  });
+}
+
+export function usePlanos() {
+  return useQuery({
+    queryKey: chaves.planos,
+    queryFn: () => repositorios.planos.listar(),
+  });
+}
+
+function useInvalidarCiclo() {
+  const client = useQueryClient();
+  return () => {
+    void client.invalidateQueries({ queryKey: chaves.controles });
+    void client.invalidateQueries({ queryKey: chaves.planos });
+  };
+}
+
+export function useRegistrarControle() {
+  const invalidar = useInvalidarCiclo();
+  return useMutation({
+    mutationFn: (novo: NovoControle) => repositorios.controles.registrar(novo),
+    onSuccess: invalidar,
+  });
+}
+
+export function useSalvarPlano() {
+  const invalidar = useInvalidarCiclo();
+  return useMutation({
+    mutationFn: (plano: PlanoMidia) => repositorios.planos.salvar(plano),
+    onSuccess: invalidar,
+  });
+}
+
+export function useAvancarPlano() {
+  const invalidar = useInvalidarCiclo();
+  return useMutation({
+    mutationFn: (pedido: AvancoPlano) => repositorios.planos.avancar(pedido),
     onSuccess: invalidar,
   });
 }
