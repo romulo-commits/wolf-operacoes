@@ -34,11 +34,14 @@ import {
   MODELO_SEMANAS_ANATOMIA,
   ROTULO_CANAL,
   ROTULO_TIPO_DIA,
+  brutoNecessario,
   distribuirMetaDiaria,
   fatiasPorCanal,
   lerPercentuais,
   percentuaisFecham100,
   planejarFunil,
+  totalPedidos,
+  totalSessoes,
   type Canal,
   type DiaPlano,
   type TipoDia,
@@ -150,6 +153,9 @@ function EditorPlano({
 
   const editavel = plano.status === 'em_elaboracao';
   const ref = referenciasDoCliente(clientId, ano, mes, plano.metaFaturamento);
+  const bruto = brutoNecessario(plano.metaFaturamento, plano.taxaAprovacao);
+  const pedidos = totalPedidos(bruto, plano.premissas.ticket.projetado);
+  const sessoes = totalSessoes(pedidos, plano.premissas.conversao.projetado);
   const funil = planejarFunil({
     faturadoPago: plano.metaFaturamento ?? Number.NaN,
     taxaAprovacao: plano.taxaAprovacao ?? Number.NaN,
@@ -172,9 +178,10 @@ function EditorPlano({
   const aquisicao = lerPercentuais(plano.aquisicao);
   const somaOrigem = CANAIS.reduce((total, canal) => total + (plano.origemSessoes[canal] ?? 0), 0);
   const somaAquisicao = CANAIS.reduce((total, canal) => total + (plano.aquisicao[canal] ?? 0), 0);
-  const fatias = funil && origem && aquisicao && percentuaisFecham100(origem) && percentuaisFecham100(aquisicao)
-    ? fatiasPorCanal(funil.sessoes, plano.premissas.cps.projetado ?? 0, plano.metaFaturamento ?? 0, origemValores(plano.origemSessoes), origemValores(plano.aquisicao))
-    : null;
+  const fatias =
+    sessoes !== null && origem && aquisicao && percentuaisFecham100(origem) && percentuaisFecham100(aquisicao) && (plano.premissas.cps.projetado ?? 0) > 0
+      ? fatiasPorCanal(sessoes, plano.premissas.cps.projetado ?? 0, plano.metaFaturamento ?? 0, origemValores(plano.origemSessoes), origemValores(plano.aquisicao))
+      : null;
   const exigeMotivo = metaNaoSuperaAnoAnterior(plano.metaFaturamento, plano.faturamentoAnoAnterior);
   const variacao = variacaoSobre(plano.metaFaturamento, plano.faturamentoAnoAnterior);
 
@@ -408,7 +415,7 @@ function EditorPlano({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <CampoNumero id="pago" rotulo="Meta de faturado pago (R$)" valor={plano.metaFaturamento} onChange={(metaFaturamento) => patch({ metaFaturamento })} />
             <CampoFracaoPercentual id="aprovacao" rotulo="Taxa de aprovação esperada (%)" fracao={plano.taxaAprovacao} onChange={(taxaAprovacao) => patch({ taxaAprovacao })} />
-            <SomenteLeitura rotulo="Bruto necessário" valor={funil ? moeda(funil.bruto, true) : '—'} />
+            <SomenteLeitura rotulo="Bruto necessário" valor={moeda(bruto, true)} />
             <CampoLinha id="fonte-aprov" rotulo="Fonte da aprovação" valor={plano.fonteAprovacao} onChange={(fonteAprovacao) => patch({ fonteAprovacao })} />
             <CampoLinha id="motivo-aprov" rotulo="Motivo da aprovação" valor={plano.motivoAprovacao} onChange={(motivoAprovacao) => patch({ motivoAprovacao })} />
             <SomenteLeitura rotulo="Variação sobre o ano anterior" valor={percentualFracao(variacao)} />
@@ -424,21 +431,21 @@ function EditorPlano({
         <Passo n={2} titulo="Calcule os pedidos" descricao="Total de pedidos = bruto ÷ ticket médio esperado.">
           <div className="grid gap-4 sm:grid-cols-2">
             <CampoNumero id="ticket" rotulo="Ticket médio esperado (R$)" valor={plano.premissas.ticket.projetado} step="0.01" onChange={(valor) => setPremissa('ticket', 'projetado', valor)} />
-            <SomenteLeitura rotulo="Total de pedidos" valor={funil ? inteiro(funil.pedidos) : '—'} />
+            <SomenteLeitura rotulo="Total de pedidos" valor={inteiro(pedidos)} />
           </div>
         </Passo>
 
         <Passo n={3} titulo="Descubra as sessões" descricao="Sessões = pedidos ÷ taxa de conversão. A origem por canal soma 100%.">
           <div className="grid gap-4 sm:grid-cols-2">
             <CampoFracaoPercentual id="conversao" rotulo="Taxa de conversão esperada (%)" fracao={plano.premissas.conversao.projetado} onChange={(valor) => setPremissa('conversao', 'projetado', valor)} />
-            <SomenteLeitura rotulo="Total de sessões" valor={funil ? inteiro(funil.sessoes) : '—'} />
+            <SomenteLeitura rotulo="Total de sessões" valor={inteiro(sessoes)} />
           </div>
           <Percentuais idPrefix="origem" titulo="Origem das sessões" soma={somaOrigem} valores={plano.origemSessoes} onChange={(canal, valor) => setCanal('origemSessoes', canal, valor)} />
         </Passo>
 
         <Passo n={4} titulo="Os 4 pilares da meta" descricao="Se qualquer um desses números cair, outro precisa compensar para a meta ser atingida.">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Pilar titulo="Sessões" valor={funil ? inteiro(funil.sessoes) : '—'} />
+            <Pilar titulo="Sessões" valor={inteiro(sessoes)} />
             <Pilar titulo="Conversão" valor={percentualFracao(plano.premissas.conversao.projetado, 2)} />
             <Pilar titulo="Ticket médio" valor={moeda(plano.premissas.ticket.projetado, true)} />
             <Pilar titulo="Aprovação" valor={percentualFracao(plano.taxaAprovacao, 2)} />
@@ -588,7 +595,7 @@ function EditorPlano({
                 <p className="text-sm font-medium sm:col-span-2 lg:col-span-4">{ROTULO_PREMISSA[chave]}</p>
                 <SomenteLeitura
                   rotulo="Projetado"
-                  valor={textoProjetado(chave, chave === 'investimento' || chave === 'sessoes' || chave === 'pedidos' ? (funil ? projetadoFunil(chave, funil) : plano.premissas[chave].projetado) : plano.premissas[chave].projetado)}
+                  valor={textoProjetado(chave, projetadoVisivel(chave, plano, { investimento: funil?.investimento ?? null, sessoes, pedidos }))}
                 />
                 <CampoNumero
                   id={`real-${chave}`}
@@ -682,12 +689,12 @@ function EditorPlano({
             </TableRow>
             <TableRow>
               <TableCell>Sessões</TableCell>
-              <TableCell className="text-right">{funil ? inteiro(funil.sessoes) : '—'}</TableCell>
+              <TableCell className="text-right">{inteiro(sessoes)}</TableCell>
               <TableCell className="text-right">{inteiro(realizado.sessoes)}</TableCell>
             </TableRow>
             <TableRow>
               <TableCell>Pedidos</TableCell>
-              <TableCell className="text-right">{funil ? inteiro(funil.pedidos) : '—'}</TableCell>
+              <TableCell className="text-right">{inteiro(pedidos)}</TableCell>
               <TableCell className="text-right">{inteiro(realizado.pedidos)}</TableCell>
             </TableRow>
           </TableBody>
@@ -773,10 +780,15 @@ function origemValores(mapa: Record<Canal, number | null>): Record<Canal, number
   };
 }
 
-function projetadoFunil(chave: PremissaPlano, funil: NonNullable<ReturnType<typeof planejarFunil>>): number {
-  if (chave === 'investimento') return funil.investimento;
-  if (chave === 'sessoes') return funil.sessoes;
-  return funil.pedidos;
+function projetadoVisivel(
+  chave: PremissaPlano,
+  plano: PlanoMidia,
+  derivados: { investimento: number | null; sessoes: number | null; pedidos: number | null },
+): number | null {
+  if (chave === 'investimento') return derivados.investimento;
+  if (chave === 'sessoes') return derivados.sessoes;
+  if (chave === 'pedidos') return derivados.pedidos;
+  return plano.premissas[chave].projetado;
 }
 
 function textoProjetado(chave: PremissaPlano, valor: number | null): string {

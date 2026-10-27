@@ -136,35 +136,39 @@ export function calendarioInicial(ano: number, mes: number): DiaPlano[] {
   }));
 }
 
-function entradasValidas(entrada: EntradaFunil): boolean {
-  const { faturadoPago, taxaAprovacao, ticketMedio, taxaConversao, cps } = entrada;
-  return (
-    faturadoPago > 0 &&
-    Number.isFinite(faturadoPago) &&
-    taxaAprovacao > 0 &&
-    taxaAprovacao <= 1 &&
-    Number.isFinite(taxaAprovacao) &&
-    ticketMedio > 0 &&
-    Number.isFinite(ticketMedio) &&
-    taxaConversao > 0 &&
-    taxaConversao <= 1 &&
-    Number.isFinite(taxaConversao) &&
-    cps > 0 &&
-    Number.isFinite(cps)
-  );
+function positivo(valor: number | null): valor is number {
+  return valor !== null && Number.isFinite(valor) && valor > 0;
+}
+
+/** Passo 1. Bruto = faturado pago ÷ taxa de aprovação. Null se faltar um dos dois. */
+export function brutoNecessario(faturadoPago: number | null, taxaAprovacao: number | null): number | null {
+  if (!positivo(faturadoPago) || !positivo(taxaAprovacao) || taxaAprovacao > 1) return null;
+  return faturadoPago / taxaAprovacao;
+}
+
+/** Passo 2. Pedidos = bruto ÷ ticket. */
+export function totalPedidos(bruto: number | null, ticketMedio: number | null): number | null {
+  if (bruto === null || !positivo(ticketMedio)) return null;
+  return bruto / ticketMedio;
+}
+
+/** Passo 3. Sessões = pedidos ÷ conversão. */
+export function totalSessoes(pedidos: number | null, taxaConversao: number | null): number | null {
+  if (pedidos === null || !positivo(taxaConversao) || taxaConversao > 1) return null;
+  return pedidos / taxaConversao;
 }
 
 /**
- * Passos 1 a 3 e o investimento do passo 7.
+ * Passos 1 a 3 mais o investimento do passo 7.
  * Bruto = pago ÷ aprovação · Pedidos = bruto ÷ ticket · Sessões = pedidos ÷ conversão ·
  * Investimento = sessões × CPS · ROAS = pago ÷ investimento.
- * Devolve null se faltar algum insumo. Não grava nada.
+ * Devolve null se faltar algum insumo, inclusive o CPS. Não grava nada.
  */
 export function planejarFunil(entrada: EntradaFunil): ResultadoFunil | null {
-  if (!entradasValidas(entrada)) return null;
-  const bruto = entrada.faturadoPago / entrada.taxaAprovacao;
-  const pedidos = bruto / entrada.ticketMedio;
-  const sessoes = pedidos / entrada.taxaConversao;
+  const bruto = brutoNecessario(entrada.faturadoPago, entrada.taxaAprovacao);
+  const pedidos = totalPedidos(bruto, entrada.ticketMedio);
+  const sessoes = totalSessoes(pedidos, entrada.taxaConversao);
+  if (bruto === null || pedidos === null || sessoes === null || !positivo(entrada.cps)) return null;
   const investimento = sessoes * entrada.cps;
   return {
     bruto,

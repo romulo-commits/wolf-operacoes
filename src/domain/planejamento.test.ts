@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { calcularMetaReversa } from './calculadora';
 import {
+  brutoNecessario,
   distribuirMetaDiaria,
   EXEMPLO_ANATOMIA,
   fatiasPorCanal,
   percentuaisFecham100,
   planejarFunil,
+  totalPedidos,
+  totalSessoes,
   type DiaPlano,
 } from './planejamento';
 
@@ -45,6 +48,24 @@ describe('planejarFunil', () => {
     expect(funil.pedidos).toBeCloseTo(reverso.pedidos, 6);
     expect(funil.sessoes).toBeCloseTo(reverso.sessoes, 6);
     expect(funil.investimento).toBeCloseTo(577_000, 2);
+  });
+
+  it('bruto, pedidos e sessões aparecem antes do CPS', () => {
+    const bruto = brutoNecessario(EXEMPLO_ANATOMIA.faturadoPago, EXEMPLO_ANATOMIA.taxaAprovacao);
+    const pedidos = totalPedidos(bruto, EXEMPLO_ANATOMIA.ticketMedio);
+    const sessoes = totalSessoes(pedidos, EXEMPLO_ANATOMIA.taxaConversao);
+    expect(bruto).toBeCloseTo(1_000_000 / 0.92, 6);
+    expect(pedidos).toBeCloseTo((1_000_000 / 0.92) / 250, 6);
+    expect(sessoes).toBeCloseTo(pedidos! / 0.02, 6);
+    expect(
+      planejarFunil({
+        faturadoPago: EXEMPLO_ANATOMIA.faturadoPago,
+        taxaAprovacao: EXEMPLO_ANATOMIA.taxaAprovacao,
+        ticketMedio: EXEMPLO_ANATOMIA.ticketMedio,
+        taxaConversao: EXEMPLO_ANATOMIA.taxaConversao,
+        cps: 0,
+      }),
+    ).toBeNull();
   });
 
   it('devolve null sem os insumos', () => {
