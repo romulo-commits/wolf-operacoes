@@ -1,0 +1,16 @@
+# Material de referência local: NÃO versionar
+_referencia/
+
+# Dependências e build
+node_modules
+dist
+*.tsbuildinfo
+*.local
+
+# Ambiente: credenciais nunca entram no repo
+.env
+.env.*
+!.env.example
+
+# Sistema
+.DS_Store
