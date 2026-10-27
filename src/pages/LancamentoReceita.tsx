@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { CampoData } from '@/components/campos';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, campoSelect } from '@/components/ui/input';
@@ -126,11 +127,11 @@ export function LancamentoReceita() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="lanc-inicio">Início do período</Label>
-              <Input id="lanc-inicio" type="date" value={campos.periodoInicio} onChange={(e) => atualizar('periodoInicio')(e.target.value)} />
+              <CampoData id="lanc-inicio" valor={campos.periodoInicio || null} onChange={(iso) => atualizar('periodoInicio')(iso ?? '')} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="lanc-fim">Fim do período</Label>
-              <Input id="lanc-fim" type="date" value={campos.periodoFim} onChange={(e) => atualizar('periodoFim')(e.target.value)} />
+              <CampoData id="lanc-fim" valor={campos.periodoFim || null} onChange={(iso) => atualizar('periodoFim')(iso ?? '')} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="lanc-pedidos">Pedidos aprovados</Label>

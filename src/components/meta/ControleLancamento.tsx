@@ -1,7 +1,7 @@
 import { useState } from 'react';
+import { CampoData } from '@/components/campos';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { ControleMeta, RegistroLancamento } from '@/domain/controle-meta';
 import { registroVazio } from '@/domain/plano-midia';
@@ -33,13 +33,11 @@ function CampoLancamento({
       </label>
       <div className="space-y-1.5">
         <Label htmlFor={`${id}-data`}>Data</Label>
-        <Input
+        <CampoData
           id={`${id}-data`}
-          type="date"
-          className="w-44"
           disabled={!valor.lancada}
-          value={valor.data ?? ''}
-          onChange={(e) => onChange({ lancada: true, data: e.target.value || null })}
+          valor={valor.data}
+          onChange={(data) => onChange({ lancada: true, data })}
         />
       </div>
     </div>

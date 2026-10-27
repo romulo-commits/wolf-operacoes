@@ -1,5 +1,4 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { roasDe } from '@/domain/calculadora';
 import {
   mediasBase,
@@ -41,6 +40,12 @@ function nomesMeses(periodos: Array<{ ano: number; mes: number }>): string {
   return periodos.map((periodo) => mesPorExtenso(periodo.ano, periodo.mes)).join(', ');
 }
 
+const MES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+function mesCurto(ano: number, mes: number): string {
+  return `${MES_CURTO[mes - 1]}/${ano}`;
+}
+
 export function ReferenciasBloco({
   clientId,
   ano,
@@ -56,8 +61,8 @@ export function ReferenciasBloco({
   const roasAno = ref.pontoAnoAnterior ? roasDe(ref.pontoAnoAnterior.receita, ref.pontoAnoAnterior.investimento) : null;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-3">
-      <Card>
+    <div className="grid min-w-0 gap-6 2xl:grid-cols-3">
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Mesmo período do ano anterior</CardTitle>
           <CardDescription>{mesPorExtenso(ref.anoAnterior.ano, ref.anoAnterior.mes)}</CardDescription>
@@ -65,15 +70,13 @@ export function ReferenciasBloco({
         <CardContent className="space-y-3">
           {ref.pontoAnoAnterior ? (
             <>
-              <Table>
-                <TableBody>
-                  <Linha rotulo="Faturamento" valor={moeda(ref.pontoAnoAnterior.receita, true)} />
-                  <Linha rotulo="Investimento" valor={moeda(ref.pontoAnoAnterior.investimento, true)} />
-                  <Linha rotulo="Pedidos" valor={ref.pontoAnoAnterior.pedidos === null ? '—' : String(ref.pontoAnoAnterior.pedidos)} />
-                  <Linha rotulo="ROAS" valor={roasAno === null ? '—' : `${decimal(roasAno)}×`} />
-                  <Linha rotulo="Variação da meta sobre o ano" valor={percentualFracao(ref.variacao)} />
-                </TableBody>
-              </Table>
+              <div>
+                <Linha rotulo="Faturamento" valor={moeda(ref.pontoAnoAnterior.receita, true)} />
+                <Linha rotulo="Investimento" valor={moeda(ref.pontoAnoAnterior.investimento, true)} />
+                <Linha rotulo="Pedidos" valor={ref.pontoAnoAnterior.pedidos === null ? '—' : String(ref.pontoAnoAnterior.pedidos)} />
+                <Linha rotulo="ROAS" valor={roasAno === null ? '—' : `${decimal(roasAno)}×`} />
+                <Linha rotulo="Variação da meta sobre o ano" valor={percentualFracao(ref.variacao)} />
+              </div>
               <p className="text-xs text-muted-foreground">{ref.pontoAnoAnterior.fonte}</p>
             </>
           ) : (
@@ -82,20 +85,18 @@ export function ReferenciasBloco({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Médias base</CardTitle>
           <CardDescription>Média dos últimos 3 meses: {nomesMeses(ref.mesesMedia)}.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {ref.medias.completa ? (
-            <Table>
-              <TableBody>
-                <Linha rotulo="Receita" valor={moeda(ref.medias.receita, true)} />
-                <Linha rotulo="Investimento" valor={moeda(ref.medias.investimento, true)} />
-                <Linha rotulo="ROAS (média dos meses)" valor={ref.medias.roas === null ? '—' : `${decimal(ref.medias.roas)}×`} />
-              </TableBody>
-            </Table>
+            <div>
+              <Linha rotulo="Receita" valor={moeda(ref.medias.receita, true)} />
+              <Linha rotulo="Investimento" valor={moeda(ref.medias.investimento, true)} />
+              <Linha rotulo="ROAS (média dos meses)" valor={ref.medias.roas === null ? '—' : `${decimal(ref.medias.roas)}×`} />
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">
               Histórico incompleto ({ref.medias.mesesConsiderados} de 3). Faltam {nomesMeses(ref.medias.mesesFaltantes)}. A média não é calculada com buraco no meio.
@@ -104,7 +105,7 @@ export function ReferenciasBloco({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Sazonalidade do ano anterior</CardTitle>
           <CardDescription>
@@ -117,24 +118,26 @@ export function ReferenciasBloco({
           {ref.pontosAno.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum mês de {ref.anoAnterior.ano} nesta série.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Mês</TableHead>
-                  <TableHead className="text-right">Receita</TableHead>
-                  <TableHead className="text-right">Invest.</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ref.pontosAno.map((ponto) => (
-                  <TableRow key={`${ponto.ano}-${ponto.mes}`}>
-                    <TableCell>{mesPorExtenso(ponto.ano, ponto.mes)}</TableCell>
-                    <TableCell className="text-right">{moeda(ponto.receita, true)}</TableCell>
-                    <TableCell className="text-right">{moeda(ponto.investimento, true)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="min-w-0 overflow-x-auto">
+              <table className="w-full min-w-[22rem] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Mês</th>
+                    <th className="py-2 pr-3 text-right font-medium">Receita</th>
+                    <th className="py-2 text-right font-medium">Invest.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ref.pontosAno.map((ponto) => (
+                    <tr key={`${ponto.ano}-${ponto.mes}`} className="border-b last:border-0">
+                      <td className="whitespace-nowrap py-2 pr-3">{mesCurto(ponto.ano, ponto.mes)}</td>
+                      <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums">{moeda(ponto.receita, true)}</td>
+                      <td className="whitespace-nowrap py-2 text-right tabular-nums">{moeda(ponto.investimento, true)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           {ref.pontosAno[0] && <p className="mt-3 text-xs text-muted-foreground">{ref.pontosAno[0].fonte}</p>}
         </CardContent>
@@ -145,9 +148,9 @@ export function ReferenciasBloco({
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
-    <TableRow>
-      <TableCell className="text-muted-foreground">{rotulo}</TableCell>
-      <TableCell className="text-right font-medium">{valor}</TableCell>
-    </TableRow>
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b py-2 text-sm last:border-0">
+      <span className="min-w-0 text-muted-foreground">{rotulo}</span>
+      <span className="ml-auto font-medium tabular-nums">{valor}</span>
+    </div>
   );
 }

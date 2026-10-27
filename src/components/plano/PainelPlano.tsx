@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { CampoFracaoPercentual, CampoLinha, CampoNumero, SelectSimples } from '@/components/campos';
+import { CampoData, CampoFracaoPercentual, CampoLinha, CampoNumero, SelectSimples } from '@/components/campos';
 import { ControleLancamento } from '@/components/meta/ControleLancamento';
 import { referenciasDoCliente } from '@/components/meta/ReferenciasBloco';
 import { Badge } from '@/components/ui/badge';
@@ -183,6 +183,13 @@ function EditorPlano({
       ? fatiasPorCanal(sessoes, plano.premissas.cps.projetado ?? 0, plano.metaFaturamento ?? 0, origemValores(plano.origemSessoes), origemValores(plano.aquisicao))
       : null;
   const exigeMotivo = metaNaoSuperaAnoAnterior(plano.metaFaturamento, plano.faturamentoAnoAnterior);
+  const planoUsaExemplo =
+    plano.metaFaturamento === EXEMPLO_ANATOMIA.faturadoPago &&
+    plano.taxaAprovacao === EXEMPLO_ANATOMIA.taxaAprovacao &&
+    plano.premissas.ticket.projetado === EXEMPLO_ANATOMIA.ticketMedio &&
+    plano.premissas.conversao.projetado === EXEMPLO_ANATOMIA.taxaConversao;
+  const realizadoDoMes =
+    realizado.receita !== null || realizado.investimento !== null || realizado.sessoes !== null || realizado.pedidos !== null;
   const variacao = variacaoSobre(plano.metaFaturamento, plano.faturamentoAnoAnterior);
 
   const patch = (parcial: Partial<PlanoMidia>) => setPlano((atual) => ({ ...atual, ...parcial }));
@@ -668,6 +675,11 @@ function EditorPlano({
       </Passo>
 
       <Passo n={10} titulo="Acompanhe e corrija" descricao="Meta deste plano contra o realizado do mês. O realizado vem dos lançamentos e do GA4 já usados no quadro da carteira.">
+        {planoUsaExemplo && realizadoDoMes && (
+          <p className="rounded-md border border-atencao/40 bg-atencao/10 p-3 text-sm" role="status">
+            A coluna “Meta do plano” está com o exemplo da anatomia, não com a meta deste cliente. O realizado é o do mês. Esta comparação não é o resultado real.
+          </p>
+        )}
         <Table>
           <TableHeader>
             <TableRow>
@@ -713,12 +725,12 @@ function EditorPlano({
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="data-revisor">Data da revisão</label>
-            <Input id="data-revisor" type="date" className="w-44" disabled={plano.status !== 'em_revisao'} value={plano.revisorData ?? ''} onChange={(e) => patch({ revisorData: e.target.value || null })} />
+            <CampoData id="data-revisor" disabled={plano.status !== 'em_revisao'} valor={plano.revisorData} onChange={(revisorData) => patch({ revisorData })} />
           </div>
           <CampoLinha id="forma-cliente" rotulo="Forma de aprovação do cliente" valor={plano.clienteForma} disabled={plano.status !== 'enviada_cliente'} onChange={(clienteForma) => patch({ clienteForma })} placeholder="WhatsApp, reunião, e-mail" />
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="data-cliente">Data de aprovação do cliente</label>
-            <Input id="data-cliente" type="date" className="w-44" disabled={plano.status !== 'enviada_cliente'} value={plano.clienteData ?? ''} onChange={(e) => patch({ clienteData: e.target.value || null })} />
+            <CampoData id="data-cliente" disabled={plano.status !== 'enviada_cliente'} valor={plano.clienteData} onChange={(clienteData) => patch({ clienteData })} />
           </div>
         </CardContent>
       </Card>
